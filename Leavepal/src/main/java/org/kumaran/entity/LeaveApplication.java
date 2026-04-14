@@ -37,7 +37,7 @@ public class LeaveApplication {
     private String toDate;
 
     @Column(nullable = false)
-    private Integer duration;
+    private Double duration;
 
     private String reason;
 
@@ -165,11 +165,11 @@ public class LeaveApplication {
         this.toDate = toDate;
     }
 
-    public Integer getDuration() {
+    public Double getDuration() {
         return duration;
     }
 
-    public void setDuration(Integer duration) {
+    public void setDuration(Double duration) {
         this.duration = duration;
     }
 

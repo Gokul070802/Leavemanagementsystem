@@ -997,7 +997,7 @@ body {
 .small-icon-btn {
     border-radius: 16px;
     background: #ffffff;
-    border: 1px solid rgba(0,0,0,0.06);
+    border: 1px solid rgba(0, 0, 0, 0.06);
     width: 48px;
     height: 48px;
     display: inline-flex;
@@ -1016,7 +1016,7 @@ body {
     gap: 12px;
     padding: 10px 14px;
     background: #ffffff;
-    border: 1px solid rgba(0,0,0,0.06);
+    border: 1px solid rgba(0, 0, 0, 0.06);
     border-radius: 16px;
 }
 
@@ -1162,7 +1162,7 @@ body {
     height: 44px;
     border-radius: 16px;
     background: #ffffff;
-    border: 1px solid rgba(0,0,0,0.06);
+    border: 1px solid rgba(0, 0, 0, 0.06);
     font-size: 18px;
     line-height: 1;
 }
@@ -1262,11 +1262,13 @@ body {
 }
 
 @media (max-width: 1100px) {
+
     .admin-metrics-grid,
     .admin-lower-grid,
     .table-card-header {
         grid-template-columns: 1fr;
     }
+
     .admin-lower-grid {
         grid-template-columns: 1fr;
     }
@@ -1391,7 +1393,7 @@ body {
     margin-right: 10px;
 }
 
-.employee-table td > .avatar-badge {
+.employee-table td>.avatar-badge {
     margin-right: 10px;
 }
 
@@ -1770,6 +1772,7 @@ body {
 
 /* Responsive */
 @media (max-width: 1024px) {
+
     .content-grid,
     .leave-tracker-container,
     .employee-details-container,
@@ -2103,12 +2106,14 @@ body {
 .approve-btn {
     background: #d4af37;
     color: #111827;
-    border: none;
+    border: 1px solid transparent;
     border-radius: 8px;
     padding: 7px 12px;
     font-size: 11px;
     font-weight: 700;
     cursor: pointer;
+    min-width: 75px;
+    text-align: center;
 }
 
 .reject-btn {
@@ -2120,6 +2125,8 @@ body {
     font-size: 11px;
     font-weight: 700;
     cursor: pointer;
+    min-width: 75px;
+    text-align: center;
 }
 
 .approve-btn:disabled,
@@ -2190,6 +2197,7 @@ body {
 }
 
 .manager-request-modal .primary-btn,
+.manager-request-modal .danger-btn,
 .manager-request-modal .secondary-btn {
     width: 100%;
     margin-top: 10px;
@@ -2203,21 +2211,6 @@ body {
     padding: 10px;
     font-family: inherit;
     margin-top: 8px;
-}
-
-.manager-request-reject-actions {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    margin-top: 12px;
-}
-
-.manager-request-reject-actions .secondary-btn {
-    border-radius: 0;
-    margin: 0;
-}
-
-.manager-request-reject-actions .danger-btn {
-    border-radius: 0;
 }
 
 @media (max-width: 980px) {

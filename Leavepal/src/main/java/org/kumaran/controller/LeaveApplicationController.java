@@ -1,6 +1,8 @@
 package org.kumaran.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.kumaran.dto.LeaveApplicationRequest;
+import org.kumaran.dto.LeaveStatusUpdateRequest;
 import org.kumaran.entity.AppNotification;
 import org.kumaran.entity.LeaveApplication;
 import org.kumaran.entity.LeaveTrackerData;
@@ -27,6 +29,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Stream;
 import java.util.stream.Collectors;
@@ -69,7 +72,7 @@ public class LeaveApplicationController {
         @ApiResponse(responseCode = "403", description = "Role is not allowed to apply leave",
             content = @Content(mediaType = "text/plain"))
     })
-    public ResponseEntity<?> applyLeave(@RequestBody LeaveApplication request, HttpServletRequest httpRequest) {
+    public ResponseEntity<?> applyLeave(@RequestBody LeaveApplicationRequest request, HttpServletRequest httpRequest) {
         Optional<UserAccount> actorOpt = jwtHelper.getActor(httpRequest);
         if (actorOpt.isEmpty()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Unauthorized");
@@ -81,28 +84,12 @@ public class LeaveApplicationController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Only employee and manager accounts can apply leave");
         }
 
-        if (request.getLeaveType() == null || request.getLeaveType().isBlank()
-                || request.getFromDate() == null || request.getFromDate().isBlank()
-                || request.getToDate() == null || request.getToDate().isBlank()
-                || request.getDuration() == null || request.getDuration() <= 0) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Invalid leave payload");
+        Optional<String> payloadError = validateLeavePayload(request);
+        if (payloadError.isPresent()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(payloadError.get());
         }
 
         String normalizedLeaveType = safeLower(request.getLeaveType());
-        if (normalizedLeaveType.equals("sick") && request.getDuration() >= 3) {
-            String attachmentData = Optional.ofNullable(request.getSickAttachmentData()).orElse("").trim();
-            if (attachmentData.isBlank()) {
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                        .body("Medical attachment is mandatory for sick leave of 3 or more days");
-            }
-        }
-
-        if (!normalizedLeaveType.equals("sick")
-                && !normalizedLeaveType.equals("casual")
-                && !normalizedLeaveType.equals("lop")) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body("Leave type must be sick, casual, or lop");
-        }
 
         Optional<String> leaveDateError = validateLeaveDateWindow(
                 normalizedLeaveType,
@@ -113,7 +100,17 @@ public class LeaveApplicationController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(leaveDateError.get());
         }
 
-        Optional<String> applyBalanceError = validateLeaveBalanceFor(actor, normalizedLeaveType, request.getDuration());
+        double calculatedDuration = calculateRequestedDuration(request);
+        if (Math.abs(calculatedDuration - request.getDuration()) > 0.000001) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Leave duration does not match selected dates and day type");
+        }
+
+        Optional<String> attachmentError = validateSickAttachment(request, calculatedDuration);
+        if (attachmentError.isPresent()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(attachmentError.get());
+        }
+
+        Optional<String> applyBalanceError = validateLeaveBalanceFor(actor, normalizedLeaveType, calculatedDuration);
         if (applyBalanceError.isPresent()) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(applyBalanceError.get());
         }
@@ -126,8 +123,8 @@ public class LeaveApplicationController {
         entity.setLeaveType(request.getLeaveType());
         entity.setFromDate(request.getFromDate());
         entity.setToDate(request.getToDate());
-        entity.setDuration(request.getDuration());
-        entity.setReason(request.getReason());
+        entity.setDuration(calculatedDuration);
+        entity.setReason(normalizeBlank(request.getReason()));
         entity.setSickAttachmentName(request.getSickAttachmentName());
         entity.setSickAttachmentData(request.getSickAttachmentData());
         entity.setStatus("PENDING");
@@ -338,7 +335,7 @@ public class LeaveApplicationController {
             content = @Content(mediaType = "text/plain"))
     })
     public ResponseEntity<?> updateStatus(@Parameter(description = "Leave request ID", required = true, example = "101") @PathVariable Long id,
-                                          @RequestBody Map<String, String> requestBody,
+                                          @RequestBody LeaveStatusUpdateRequest requestBody,
                                           HttpServletRequest request) {
         Optional<UserAccount> actorOpt = jwtHelper.getActor(request);
         if (actorOpt.isEmpty()) {
@@ -364,12 +361,22 @@ public class LeaveApplicationController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Access denied");
         }
 
-        String status = Optional.ofNullable(requestBody.get("status")).orElse("").trim().toUpperCase(Locale.ROOT);
+        if (requestBody == null) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Status payload is required");
+        }
+
+        String status = Optional.ofNullable(requestBody.getStatus()).orElse("").trim().toUpperCase(Locale.ROOT);
         if (!status.equals("APPROVED") && !status.equals("REJECTED")) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Status must be APPROVED or REJECTED");
         }
 
-        String comment = Optional.ofNullable(requestBody.get("comment")).orElse("").trim();
+        String comment = Optional.ofNullable(requestBody.getComment()).orElse("").trim();
+        if (status.equals("REJECTED") && comment.isBlank()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Rejection reason is required");
+        }
+        if (comment.length() > 500) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Comment must be 500 characters or less");
+        }
         String previousStatus = safeLower(app.getStatus());
 
         if (!previousStatus.equals("pending")) {
@@ -573,7 +580,7 @@ public class LeaveApplicationController {
                 || reporting.equals(normalizeKey(manager.getUsername()));
     }
 
-    private Optional<UserAccount> resolveManagerFor(UserAccount employee, LeaveApplication request) {
+    private Optional<UserAccount> resolveManagerFor(UserAccount employee, LeaveApplicationRequest request) {
         String reportingId = normalizeBlank(employee.getReportingEmployeeId());
 
         if (reportingId != null) {
@@ -735,8 +742,74 @@ public class LeaveApplicationController {
         return values;
     }
 
-    private Optional<String> validateLeaveBalanceFor(UserAccount employee, String normalizedLeaveType, Integer duration) {
-        int requested = duration == null ? 0 : duration;
+    private Optional<String> validateLeavePayload(LeaveApplicationRequest request) {
+        if (request == null) {
+            return Optional.of("Leave payload is required");
+        }
+        String leaveType = safeLower(request.getLeaveType());
+        if (!leaveType.equals("sick") && !leaveType.equals("casual") && !leaveType.equals("lop")) {
+            return Optional.of("Leave type must be sick, casual, or lop");
+        }
+        if (normalizeBlank(request.getFromDate()) == null || normalizeBlank(request.getToDate()) == null) {
+            return Optional.of("From date and to date are required");
+        }
+        if (request.getDuration() == null || request.getDuration() <= 0) {
+            return Optional.of("Invalid leave duration");
+        }
+        if (!isHalfDayIncrement(request.getDuration())) {
+            return Optional.of("Leave duration must be a whole-day or half-day increment");
+        }
+        String dayType = safeLower(request.getDayType());
+        if (!dayType.isBlank() && !dayType.equals("full") && !dayType.equals("half")) {
+            return Optional.of("Day type must be full or half");
+        }
+        String reason = normalizeBlank(request.getReason());
+        if (reason != null && reason.length() > 500) {
+            return Optional.of("Leave reason must be 500 characters or less");
+        }
+        return Optional.empty();
+    }
+
+    private double calculateRequestedDuration(LeaveApplicationRequest request) {
+        LocalDate fromDate = LocalDate.parse(request.getFromDate());
+        LocalDate toDate = LocalDate.parse(request.getToDate());
+        long calendarDays = ChronoUnit.DAYS.between(fromDate, toDate) + 1;
+        if (calendarDays == 1 && safeLower(request.getDayType()).equals("half")) {
+            return 0.5;
+        }
+        return (double) calendarDays;
+    }
+
+    private Optional<String> validateSickAttachment(LeaveApplicationRequest request, double duration) {
+        if (!safeLower(request.getLeaveType()).equals("sick") || duration < 3) {
+            return Optional.empty();
+        }
+
+        String attachmentData = Optional.ofNullable(request.getSickAttachmentData()).orElse("").trim();
+        if (attachmentData.isBlank()) {
+            return Optional.of("Medical attachment is mandatory for sick leave of 3 or more days");
+        }
+
+        AttachmentPayload payload = parseAttachmentData(attachmentData);
+        if (payload == null || payload.bytes().length == 0) {
+            return Optional.of("Attachment content is invalid");
+        }
+        if (!"application/pdf".equalsIgnoreCase(payload.contentType())) {
+            return Optional.of("Only PDF attachment is allowed for sick leave");
+        }
+        if (payload.bytes().length > 5 * 1024 * 1024) {
+            return Optional.of("Attachment size must be 5 MB or less");
+        }
+
+        String name = Optional.ofNullable(request.getSickAttachmentName()).orElse("").trim().toLowerCase(Locale.ROOT);
+        if (!name.endsWith(".pdf")) {
+            return Optional.of("Attachment file name must end with .pdf");
+        }
+        return Optional.empty();
+    }
+
+    private Optional<String> validateLeaveBalanceFor(UserAccount employee, String normalizedLeaveType, Double duration) {
+        double requested = duration == null ? 0.0 : duration;
         if (requested <= 0) {
             return Optional.of("Invalid leave duration");
         }
@@ -754,9 +827,9 @@ public class LeaveApplicationController {
             return Optional.of("Unable to validate leave balance for employee");
         }
 
-        int available = normalizedLeaveType.equals("sick")
-                ? safeInt(tracker.getSickLeaveAvailable())
-                : safeInt(tracker.getCasualLeaveAvailable());
+        double available = normalizedLeaveType.equals("sick")
+                ? safeDouble(tracker.getSickLeaveAvailable())
+                : safeDouble(tracker.getCasualLeaveAvailable());
 
         if (available <= 0) {
             return Optional.of("Insufficient " + normalizedLeaveType + " leave balance");
@@ -804,8 +877,15 @@ public class LeaveApplicationController {
         }
     }
 
-    private int safeInt(Integer value) {
-        return value == null ? 0 : value;
+    private double safeDouble(Double value) {
+        return value == null ? 0.0 : value;
+    }
+
+    private boolean isHalfDayIncrement(Double value) {
+        if (value == null) {
+            return false;
+        }
+        return Math.abs((value * 2) - Math.rint(value * 2)) < 0.000001;
     }
 
     private record AttachmentPayload(String contentType, byte[] bytes) {

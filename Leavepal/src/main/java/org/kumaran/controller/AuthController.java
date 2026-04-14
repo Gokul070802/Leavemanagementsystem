@@ -3,6 +3,7 @@ package org.kumaran.controller;
 import jakarta.servlet.http.HttpServletRequest;
 import org.kumaran.dto.CreateUserRequest;
 import org.kumaran.dto.LoginRequest;
+import org.kumaran.dto.UserProfileUpdateRequest;
 import org.kumaran.entity.UserAccount;
 import org.kumaran.dto.UserResponse;
 import org.kumaran.repository.LeaveTrackerRepository;
@@ -32,9 +33,11 @@ import java.util.Optional;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.Period;
 import java.time.format.DateTimeParseException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @RestController
@@ -48,6 +51,13 @@ public class AuthController {
     private final JwtRequestHelper jwtHelper;
     private final PasswordEncoder passwordEncoder;
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+    private static final Pattern EMAIL_PATTERN = Pattern.compile("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
+    private static final Pattern INDIAN_PHONE_PATTERN = Pattern.compile("^(?:\\+91[- ]?|0)?[6-9]\\d{9}$");
+    private static final Pattern STRONG_PASSWORD_PATTERN = Pattern.compile("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^A-Za-z0-9]).{8,64}$");
+    private static final Set<String> ALLOWED_DEPARTMENTS = Set.of("Engineering", "Marketing", "HR Operations", "Finance");
+    private static final Set<String> ALLOWED_BLOOD_GROUPS = Set.of("A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-");
+    private static final Set<String> ALLOWED_MARITAL_STATUSES = Set.of("Single", "Married", "Divorced", "Widowed");
+    private static final Set<String> ALLOWED_GENDERS = Set.of("Male", "Female", "Other");
 
     public AuthController(UserAccountRepository userRepository,
                           LeaveTrackerRepository leaveTrackerRepository,
@@ -77,7 +87,14 @@ public class AuthController {
             content = @Content(mediaType = "text/plain"))
     })
     public ResponseEntity<?> login(@RequestBody LoginRequest request) {
-        Optional<UserAccount> account = userRepository.findByUsername(request.getUsername());
+        if (request == null
+                || isBlank(request.getUsername())
+                || isBlank(request.getPassword())
+                || isBlank(request.getRole())) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Username, password, and role are required");
+        }
+
+        Optional<UserAccount> account = userRepository.findByUsername(request.getUsername().trim());
         if (account.isEmpty()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid username or password");
         }
@@ -254,6 +271,10 @@ public class AuthController {
         if (newPassword.length() < 8) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("New password must be at least 8 characters");
         }
+        if (!isStrongPassword(newPassword)) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("New password must include uppercase, lowercase, number, and special character");
+        }
 
         Optional<UserAccount> userOpt = userRepository.findByUsername(username);
         if (userOpt.isEmpty()) {
@@ -323,30 +344,35 @@ public class AuthController {
     public ResponseEntity<?> updateUserProfile(
         @Parameter(description = "Username of the user to update", required = true, example = "employee@company.com")
         @PathVariable String username,
-        @RequestBody UserResponse request,
+        @RequestBody UserProfileUpdateRequest request,
         HttpServletRequest httpRequest) {
         if (!jwtHelper.isSelfOrAdmin(username, httpRequest)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Access denied");
         }
-
         Optional<UserAccount> account = userRepository.findByUsername(username);
         if (account.isEmpty()) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body("User not found");
         }
 
         UserAccount user = account.get();
+        Optional<String> validationError = user.getRole() != null && user.getRole().equalsIgnoreCase("admin")
+                ? validateAdminProfileUpdate(request)
+                : validateProfileUpdate(request);
+        if (validationError.isPresent()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(validationError.get());
+        }
         if (user.getRole() != null && user.getRole().equalsIgnoreCase("admin")) {
-            user.setPhoneNumber(request.getPhoneNumber());
+            user.setPhoneNumber(request.getPhoneNumber().trim());
         } else {
             // Preserve immutable profile values for workforce users
-            user.setPhoneNumber(request.getPhoneNumber());
-            user.setNationality(request.getNationality());
-            user.setBloodGroup(request.getBloodGroup());
-            user.setMaritalStatus(request.getMaritalStatus());
-            user.setDob(request.getDob());
-            user.setPersonalEmail(request.getPersonalEmail());
-            user.setGender(request.getGender());
-            user.setAddress(request.getAddress());
+            user.setPhoneNumber(request.getPhoneNumber().trim());
+            user.setNationality(request.getNationality().trim());
+            user.setBloodGroup(request.getBloodGroup().trim());
+            user.setMaritalStatus(request.getMaritalStatus().trim());
+            user.setDob(request.getDob().trim());
+            user.setPersonalEmail(request.getPersonalEmail().trim());
+            user.setGender(request.getGender().trim());
+            user.setAddress(request.getAddress().trim());
         }
 
         userRepository.save(user);
@@ -376,6 +402,10 @@ public class AuthController {
         if (!jwtHelper.isAdmin(requestContext)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Only admin users can create accounts");
         }
+        Optional<String> validationError = validateCreateUser(request);
+        if (validationError.isPresent()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(validationError.get());
+        }
 
         String requestedRole = request.getRole() == null ? "" : request.getRole().trim();
         boolean isEmployeeRole = requestedRole.equalsIgnoreCase("employee");
@@ -386,7 +416,9 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Role must be one of admin, manager, or employee");
         }
 
-        if (userRepository.findByUsername(request.getUsername()).isPresent()) {
+        String username = request.getUsername().trim();
+        String emailId = request.getEmailId().trim();
+        if (userRepository.findByUsername(username).isPresent()) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body("Username already exists");
         }
 
@@ -448,19 +480,19 @@ public class AuthController {
         }
 
         UserAccount user = new UserAccount();
-        user.setUsername(request.getUsername());
+        user.setUsername(username);
         user.setPassword(passwordEncoder.encode(request.getPassword()));
-        user.setRole(request.getRole());
-        String resolvedEmployeeId = request.getRole() != null && (request.getRole().equalsIgnoreCase("employee") || request.getRole().equalsIgnoreCase("manager")) ?
+        user.setRole(requestedRole.toLowerCase(Locale.ROOT));
+        String resolvedEmployeeId = isEmployeeRole || isManagerRole ?
             (request.getEmployeeId() != null && !request.getEmployeeId().isBlank() ? request.getEmployeeId() : generateNextEmployeeId()) : null;
         user.setEmployeeId(resolvedEmployeeId);
-        user.setEmailId(request.getEmailId());
-        user.setFirstName(request.getFirstName());
-        user.setLastName(request.getLastName());
-        user.setDepartment(request.getDepartment());
-        user.setDesignation(request.getDesignation());
-        user.setReportingEmployeeId(request.getReportingEmployeeId());
-        user.setLocation(request.getLocation());
+        user.setEmailId(emailId);
+        user.setFirstName(request.getFirstName().trim());
+        user.setLastName(request.getLastName().trim());
+        user.setDepartment(request.getDepartment().trim());
+        user.setDesignation(request.getDesignation().trim());
+        user.setReportingEmployeeId(isEmployeeRole ? request.getReportingEmployeeId().trim() : "");
+        user.setLocation(request.getLocation().trim());
         user.setJoining(joiningDate.toString());
         user.setPhoneNumber(request.getPhoneNumber());
         user.setNationality(request.getNationality());
@@ -728,6 +760,110 @@ public class AuthController {
         return a != null && b != null && a.equalsIgnoreCase(b);
     }
 
+    private Optional<String> validateCreateUser(CreateUserRequest request) {
+        if (request == null) {
+            return Optional.of("User payload is required");
+        }
+        if (isBlank(request.getRole())) {
+            return Optional.of("Role is required");
+        }
+        String role = request.getRole().trim().toLowerCase(Locale.ROOT);
+        if (!role.equals("admin") && !role.equals("manager") && !role.equals("employee")) {
+            return Optional.of("Role must be one of admin, manager, or employee");
+        }
+        if (isBlank(request.getEmailId()) || !isEmail(request.getEmailId())) {
+            return Optional.of("Valid official email is required");
+        }
+        if (isBlank(request.getUsername())) {
+            return Optional.of("Username is required");
+        }
+        if (!request.getUsername().trim().equalsIgnoreCase(request.getEmailId().trim())) {
+            return Optional.of("Username must match official email");
+        }
+        if (isBlank(request.getPassword()) || !isStrongPassword(request.getPassword())) {
+            return Optional.of("Password must be 8-64 characters and include uppercase, lowercase, number, and special character");
+        }
+        if (isBlank(request.getFirstName()) || request.getFirstName().trim().length() > 60) {
+            return Optional.of("First name is required and must be 60 characters or less");
+        }
+        if (isBlank(request.getLastName()) || request.getLastName().trim().length() > 60) {
+            return Optional.of("Last name is required and must be 60 characters or less");
+        }
+        if (isBlank(request.getDepartment()) || !ALLOWED_DEPARTMENTS.contains(request.getDepartment().trim())) {
+            return Optional.of("Department must be one of " + String.join(", ", ALLOWED_DEPARTMENTS));
+        }
+        if (isBlank(request.getDesignation()) || request.getDesignation().trim().length() > 80) {
+            return Optional.of("Designation is required and must be 80 characters or less");
+        }
+        if (isBlank(request.getLocation()) || request.getLocation().trim().length() > 100) {
+            return Optional.of("Location is required and must be 100 characters or less");
+        }
+        if (isBlank(request.getJoining())) {
+            return Optional.of("Joining date is required");
+        }
+        if (role.equals("employee") && isBlank(request.getReportingEmployeeId())) {
+            return Optional.of("Reporting manager is required when creating an employee");
+        }
+        return Optional.empty();
+    }
+
+    private Optional<String> validateProfileUpdate(UserProfileUpdateRequest request) {
+        if (request == null) {
+            return Optional.of("Profile payload is required");
+        }
+        Optional<String> phoneError = validatePhone(request);
+        if (phoneError.isPresent()) {
+            return phoneError;
+        }
+        if (isBlank(request.getNationality()) || request.getNationality().trim().length() > 60) {
+            return Optional.of("Nationality is required and must be 60 characters or less");
+        }
+        if (isBlank(request.getBloodGroup()) || !ALLOWED_BLOOD_GROUPS.contains(request.getBloodGroup().trim())) {
+            return Optional.of("Blood group must be one of " + String.join(", ", ALLOWED_BLOOD_GROUPS));
+        }
+        if (isBlank(request.getMaritalStatus()) || !ALLOWED_MARITAL_STATUSES.contains(request.getMaritalStatus().trim())) {
+            return Optional.of("Marital status must be one of " + String.join(", ", ALLOWED_MARITAL_STATUSES));
+        }
+        if (isBlank(request.getDob())) {
+            return Optional.of("Date of birth is required");
+        }
+        try {
+            LocalDate dob = LocalDate.parse(request.getDob().trim());
+            if (dob.isAfter(LocalDate.now())) {
+                return Optional.of("Date of birth cannot be in the future");
+            }
+            if (Period.between(dob, LocalDate.now()).getYears() < 18) {
+                return Optional.of("User must be at least 18 years old");
+            }
+        } catch (DateTimeParseException ex) {
+            return Optional.of("Date of birth must be a valid ISO date (yyyy-MM-dd)");
+        }
+        if (isBlank(request.getPersonalEmail()) || !isEmail(request.getPersonalEmail())) {
+            return Optional.of("Valid personal email is required");
+        }
+        if (isBlank(request.getGender()) || !ALLOWED_GENDERS.contains(request.getGender().trim())) {
+            return Optional.of("Gender must be one of " + String.join(", ", ALLOWED_GENDERS));
+        }
+        if (isBlank(request.getAddress()) || request.getAddress().trim().length() > 250) {
+            return Optional.of("Address is required and must be 250 characters or less");
+        }
+        return Optional.empty();
+    }
+
+    private Optional<String> validateAdminProfileUpdate(UserProfileUpdateRequest request) {
+        if (request == null) {
+            return Optional.of("Profile payload is required");
+        }
+        return validatePhone(request);
+    }
+
+    private Optional<String> validatePhone(UserProfileUpdateRequest request) {
+        if (isBlank(request.getPhoneNumber()) || !INDIAN_PHONE_PATTERN.matcher(request.getPhoneNumber().trim()).matches()) {
+            return Optional.of("Valid Indian phone number is required");
+        }
+        return Optional.empty();
+    }
+
     private UserResponse toUserResponse(UserAccount user) {
         UserResponse response = UserResponse.from(user);
         enrichReportingManagerContext(response);
@@ -863,7 +999,15 @@ public class AuthController {
     }
 
     private boolean isEmail(String value) {
-        return value != null && value.contains("@");
+        return value != null && EMAIL_PATTERN.matcher(value.trim()).matches();
+    }
+
+    private boolean isStrongPassword(String value) {
+        return value != null && STRONG_PASSWORD_PATTERN.matcher(value).matches();
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isBlank();
     }
 
     private String generateRandomPassword(int length) {

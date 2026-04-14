@@ -133,8 +133,8 @@ public class LeaveTrackerService {
     /**
      * Create or update leave tracker for an employee
      */
-    public LeaveTrackerData syncLeaveTrackerForEmployee(UserAccount employee, int sickLeaveBooked, int casualLeaveBooked, int lopBooked) {
-        int totalEntitlement = calculateTotalEntitlement(employee.getJoining());
+    public LeaveTrackerData syncLeaveTrackerForEmployee(UserAccount employee, double sickLeaveBooked, double casualLeaveBooked, double lopBooked) {
+        double totalEntitlement = calculateTotalEntitlement(employee.getJoining());
 
         Optional<LeaveTrackerData> existing = leaveTrackerRepository.findByEmployeeId(employee.getEmployeeId());
         LeaveTrackerData tracker;
@@ -156,9 +156,9 @@ public class LeaveTrackerService {
             );
         }
 
-        tracker.setSickLeaveAvailable(Math.max(0, totalEntitlement - sickLeaveBooked));
-        tracker.setCasualLeaveAvailable(Math.max(0, totalEntitlement - casualLeaveBooked));
-        tracker.setLossOfPayAvailable(0);
+        tracker.setSickLeaveAvailable(Math.max(0.0, totalEntitlement - sickLeaveBooked));
+        tracker.setCasualLeaveAvailable(Math.max(0.0, totalEntitlement - casualLeaveBooked));
+        tracker.setLossOfPayAvailable(0.0);
         tracker.setSickLeaveBooked(sickLeaveBooked);
         tracker.setCasualLeaveBooked(casualLeaveBooked);
         tracker.setLossOfPayBooked(lopBooked);
@@ -206,10 +206,10 @@ public class LeaveTrackerService {
             return null;
         }
 
-        int totalEntitlement = calculateTotalEntitlement(employee.getJoining());
-        int sickBooked = 0;
-        int casualBooked = 0;
-        int lopBooked = 0;
+        double totalEntitlement = calculateTotalEntitlement(employee.getJoining());
+        double sickBooked = 0.0;
+        double casualBooked = 0.0;
+        double lopBooked = 0.0;
 
         List<LeaveApplication> applications = leaveApplicationRepository
             .findByIdentityAndStatusOrderByCreatedAtAsc(
@@ -220,19 +220,19 @@ public class LeaveTrackerService {
             );
 
         for (LeaveApplication app : applications) {
-            int duration = app.getDuration() == null ? 0 : app.getDuration();
+            double duration = app.getDuration() == null ? 0.0 : app.getDuration();
             String leaveType = app.getLeaveType() == null ? "" : app.getLeaveType().trim().toLowerCase();
 
             if (leaveType.equals("lop")) {
                 lopBooked += duration;
             } else if (leaveType.equals("sick")) {
-                int available = Math.max(0, totalEntitlement - sickBooked);
-                int used = Math.min(duration, available);
+                double available = Math.max(0.0, totalEntitlement - sickBooked);
+                double used = Math.min(duration, available);
                 sickBooked += used;
                 lopBooked += duration - used;
             } else if (leaveType.equals("casual")) {
-                int available = Math.max(0, totalEntitlement - casualBooked);
-                int used = Math.min(duration, available);
+                double available = Math.max(0.0, totalEntitlement - casualBooked);
+                double used = Math.min(duration, available);
                 casualBooked += used;
                 lopBooked += duration - used;
             }

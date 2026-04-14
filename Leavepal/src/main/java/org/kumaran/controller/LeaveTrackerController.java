@@ -1,6 +1,7 @@
 package org.kumaran.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.kumaran.dto.LeaveTrackerUpdateRequest;
 import org.kumaran.entity.LeaveTrackerData;
 import org.kumaran.entity.UserAccount;
 import org.kumaran.repository.LeaveTrackerRepository;
@@ -77,50 +78,20 @@ public class LeaveTrackerController {
     })
     public ResponseEntity<?> syncLeaveTrackerData(@RequestBody LeaveTrackerData request,
                                                   HttpServletRequest httpRequest) {
+        if (!jwtHelper.isAdmin(httpRequest)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Access denied");
+        }
+        if (request == null || request.getEmployeeId() == null || request.getEmployeeId().isBlank()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Employee ID is required");
+        }
+
         Optional<UserAccount> employeeOpt = userRepository.findByEmployeeId(request.getEmployeeId());
         if (employeeOpt.isEmpty()) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Employee not found");
         }
 
-        if (!jwtHelper.isAdmin(httpRequest)) {
-            String empUsername = employeeOpt.get().getUsername();
-            String callerUsername = jwtHelper.extractUsername(httpRequest);
-            if (empUsername == null || !empUsername.equalsIgnoreCase(callerUsername)) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Access denied");
-            }
-        }
-
         UserAccount employee = employeeOpt.get();
-        Optional<LeaveTrackerData> existing = leaveTrackerRepository.findByEmployeeId(request.getEmployeeId());
-
-        LeaveTrackerData tracker;
-        if (existing.isPresent()) {
-            tracker = existing.get();
-            tracker.setSickLeaveAvailable(request.getSickLeaveAvailable());
-            tracker.setCasualLeaveAvailable(request.getCasualLeaveAvailable());
-            tracker.setLossOfPayAvailable(request.getLossOfPayAvailable());
-            tracker.setSickLeaveBooked(request.getSickLeaveBooked());
-            tracker.setCasualLeaveBooked(request.getCasualLeaveBooked());
-            tracker.setLossOfPayBooked(request.getLossOfPayBooked());
-        } else {
-            String employeeName = (employee.getFirstName() != null ? employee.getFirstName() : "") + " " + 
-                                  (employee.getLastName() != null ? employee.getLastName() : "");
-            tracker = new LeaveTrackerData(
-                request.getEmployeeId(),
-                employeeName.trim(),
-                employee.getDesignation(),
-                employee.getDepartment(),
-                employee.getJoining()
-            );
-            tracker.setSickLeaveAvailable(request.getSickLeaveAvailable());
-            tracker.setCasualLeaveAvailable(request.getCasualLeaveAvailable());
-            tracker.setLossOfPayAvailable(request.getLossOfPayAvailable());
-            tracker.setSickLeaveBooked(request.getSickLeaveBooked());
-            tracker.setCasualLeaveBooked(request.getCasualLeaveBooked());
-            tracker.setLossOfPayBooked(request.getLossOfPayBooked());
-        }
-
-        leaveTrackerRepository.save(tracker);
+        LeaveTrackerData tracker = leaveTrackerService.recalculateLeaveTrackerForEmployee(employee);
         return ResponseEntity.ok(tracker);
     }
 
@@ -218,10 +189,21 @@ public class LeaveTrackerController {
     public ResponseEntity<?> updateLeaveTracker(
         @Parameter(description = "Employee ID", required = true, example = "LP-001")
         @PathVariable String employeeId,
-        @RequestBody LeaveTrackerData request,
+        @RequestBody LeaveTrackerUpdateRequest request,
         HttpServletRequest httpRequest) {
         if (!jwtHelper.isAdmin(httpRequest)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Access denied");
+        }
+        Optional<String> validationError = validateTrackerValues(
+                request.getSickLeaveAvailable(),
+                request.getCasualLeaveAvailable(),
+                request.getLossOfPayAvailable(),
+                request.getSickLeaveBooked(),
+                request.getCasualLeaveBooked(),
+                request.getLossOfPayBooked()
+        );
+        if (validationError.isPresent()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(validationError.get());
         }
 
         Optional<LeaveTrackerData> existing = leaveTrackerRepository.findByEmployeeId(employeeId);
@@ -279,6 +261,28 @@ public class LeaveTrackerController {
         LeaveTrackerData trackerToDelete = Objects.requireNonNull(existing.get());
         leaveTrackerRepository.delete(trackerToDelete);
         return ResponseEntity.noContent().build();
+    }
+
+    private Optional<String> validateTrackerValues(Double... values) {
+        for (Double value : values) {
+            if (value == null) {
+                continue;
+            }
+            if (value < 0) {
+                return Optional.of("Leave tracker values cannot be negative");
+            }
+            if (!isHalfDayIncrement(value)) {
+                return Optional.of("Leave tracker values must be whole-day or half-day increments");
+            }
+        }
+        return Optional.empty();
+    }
+
+    private boolean isHalfDayIncrement(Double value) {
+        if (value == null) {
+            return true;
+        }
+        return Math.abs((value * 2) - Math.rint(value * 2)) < 0.000001;
     }
 }
 
