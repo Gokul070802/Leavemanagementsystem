@@ -1,0 +1,18 @@
+# Maven / Gradle build output
+target/
+*.class
+*.jar
+*.war
+*.ear
+
+# Logs
+*.log
+
+# Environment files
+.env
+application-prod.properties
+
+# IDE settings
+.vscode/
+.idea/
+*.iml
