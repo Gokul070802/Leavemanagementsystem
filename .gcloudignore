@@ -1,0 +1,9 @@
+.gcloudignore
+.git
+.gitignore
+.vscode/
+target/
+frontend/
+node_modules/
+**/.DS_Store
+**/*.log

@@ -1,0 +1,32 @@
+﻿steps:
+  - name: "postgres:17"
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        set -e
+        echo "Dumping from Supabase..."
+        PGPASSWORD='Engageemergeexcel' pg_dump \
+          -h aws-1-ap-northeast-2.pooler.supabase.com \
+          -p 5432 \
+          -U postgres.ifmpanygpspzxwpkfmsm \
+          -d postgres \
+          --schema=public \
+          --data-only \
+          --no-owner \
+          --no-acl \
+          --disable-triggers \
+          -f /workspace/supabase_raw.sql
+        echo "Raw dump lines: $(wc -l < /workspace/supabase_raw.sql)"
+        printf 'TRUNCATE TABLE users, leave_application, leave_tracker, app_notification CASCADE;\n' > /workspace/supabase_dump.sql
+        sed 's/public\."Employees"/public.users/g; s/"Employees"/users/g; /pg_catalog\.setval.*users_id_seq/d; /setval.*users/d' /workspace/supabase_raw.sql >> /workspace/supabase_dump.sql
+        echo "Final dump lines: $(wc -l < /workspace/supabase_dump.sql)"
+        head -5 /workspace/supabase_dump.sql
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: gcloud
+    args:
+      - storage
+      - cp
+      - /workspace/supabase_dump.sql
+      - gs://project-0168023a-2379-46dc-989_cloudbuild/migration/supabase_dump.sql
+timeout: "600s"
