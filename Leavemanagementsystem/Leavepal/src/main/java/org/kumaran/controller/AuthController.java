@@ -1,10 +1,23 @@
 package org.kumaran.controller;
 
-import jakarta.servlet.http.HttpServletRequest;
+import java.security.SecureRandom;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+
 import org.kumaran.dto.CreateUserRequest;
 import org.kumaran.dto.LoginRequest;
-import org.kumaran.entity.UserAccount;
 import org.kumaran.dto.UserResponse;
+import org.kumaran.entity.UserAccount;
 import org.kumaran.repository.LeaveTrackerRepository;
 import org.kumaran.repository.UserAccountRepository;
 import org.kumaran.security.JwtRequestHelper;
@@ -13,29 +26,23 @@ import org.kumaran.service.SupabaseAuthService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.Schema;
-
-import java.util.List;
-import java.util.HashMap;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.security.SecureRandom;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.format.DateTimeParseException;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
+import jakarta.servlet.http.HttpServletRequest;
 
 @RestController
 @RequestMapping("/api")
@@ -48,13 +55,16 @@ public class AuthController {
     private final JwtRequestHelper jwtHelper;
     private final PasswordEncoder passwordEncoder;
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+    private static final Pattern NATIONALITY_PATTERN = Pattern.compile("^[A-Za-z\\s]+$");
+    private static final Pattern BLOOD_GROUP_PATTERN = Pattern.compile("^(A|B|AB|O)[+-]$", Pattern.CASE_INSENSITIVE);
+    private static final Pattern EMAIL_PATTERN = Pattern.compile("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
 
     public AuthController(UserAccountRepository userRepository,
-                          LeaveTrackerRepository leaveTrackerRepository,
-                          LeaveTrackerService leaveTrackerService,
-                          SupabaseAuthService supabaseAuthService,
-                          JwtRequestHelper jwtHelper,
-                          PasswordEncoder passwordEncoder) {
+            LeaveTrackerRepository leaveTrackerRepository,
+            LeaveTrackerService leaveTrackerService,
+            SupabaseAuthService supabaseAuthService,
+            JwtRequestHelper jwtHelper,
+            PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.leaveTrackerRepository = leaveTrackerRepository;
         this.leaveTrackerService = leaveTrackerService;
@@ -64,17 +74,11 @@ public class AuthController {
     }
 
     @PostMapping("/auth/login")
-    @Operation(
-        summary = "User Login",
-        description = "Authenticate user with username, password and role. Returns user profile on successful authentication."
-    )
+    @Operation(summary = "User Login", description = "Authenticate user with username, password and role. Returns user profile on successful authentication.")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Login successful",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserResponse.class))),
-        @ApiResponse(responseCode = "401", description = "Invalid username, password, or role",
-            content = @Content(mediaType = "text/plain")),
-        @ApiResponse(responseCode = "500", description = "Internal server error",
-            content = @Content(mediaType = "text/plain"))
+            @ApiResponse(responseCode = "200", description = "Login successful", content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Invalid username, password, or role", content = @Content(mediaType = "text/plain")),
+            @ApiResponse(responseCode = "500", description = "Internal server error", content = @Content(mediaType = "text/plain"))
     })
     public ResponseEntity<?> login(@RequestBody LoginRequest request) {
         Optional<UserAccount> account = userRepository.findByUsername(request.getUsername());
@@ -90,9 +94,8 @@ public class AuthController {
         String requestedRole = request.getRole() == null ? "" : request.getRole().trim();
         if (!requestedRole.isBlank()) {
             if (requestedRole.equalsIgnoreCase("workforce")) {
-                boolean allowedWorkforceRole = user.getRole() != null && (
-                        user.getRole().equalsIgnoreCase("manager")
-                                || user.getRole().equalsIgnoreCase("employee"));
+                boolean allowedWorkforceRole = user.getRole() != null && (user.getRole().equalsIgnoreCase("manager")
+                        || user.getRole().equalsIgnoreCase("employee"));
                 if (!allowedWorkforceRole) {
                     return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid username or password");
                 }
@@ -106,8 +109,7 @@ public class AuthController {
                     .body(Map.of(
                             "code", "PASSWORD_CHANGE_REQUIRED",
                             "message", "Temporary password detected. Please create a new password to continue.",
-                            "username", user.getUsername()
-                    ));
+                            "username", user.getUsername()));
         }
 
         if (supabaseAuthService.isEnabled() && isEmail(user.getUsername())) {
@@ -125,17 +127,11 @@ public class AuthController {
     }
 
     @PostMapping("/auth/forgot-password-request")
-    @Operation(
-        summary = "Request Password Reset",
-        description = "Creates a password reset request for an existing employee or manager account. Unknown usernames/emails are rejected, admin accounts are not eligible, and repeat requests return an already-pending message."
-    )
+    @Operation(summary = "Request Password Reset", description = "Creates a password reset request for an existing employee or manager account. Unknown usernames/emails are rejected, admin accounts are not eligible, and repeat requests return an already-pending message.")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Reset request queued successfully",
-            content = @Content(mediaType = "text/plain")),
-        @ApiResponse(responseCode = "400", description = "Username or email is missing or account is not eligible",
-            content = @Content(mediaType = "text/plain")),
-        @ApiResponse(responseCode = "404", description = "Workforce account not found",
-            content = @Content(mediaType = "text/plain"))
+            @ApiResponse(responseCode = "200", description = "Reset request queued successfully", content = @Content(mediaType = "text/plain")),
+            @ApiResponse(responseCode = "400", description = "Username or email is missing or account is not eligible", content = @Content(mediaType = "text/plain")),
+            @ApiResponse(responseCode = "404", description = "Workforce account not found", content = @Content(mediaType = "text/plain"))
     })
     public ResponseEntity<?> requestPasswordReset(@RequestBody Map<String, String> requestBody) {
         String identifier = requestBody.getOrDefault("usernameOrEmail", requestBody.getOrDefault("email", ""));
@@ -176,23 +172,16 @@ public class AuthController {
     }
 
     @PostMapping("/users/{username}/generate-temporary-password")
-    @Operation(
-        summary = "Generate Temporary Password",
-        description = "Admin-only endpoint to generate and assign a temporary password for employee/manager accounts."
-    )
+    @Operation(summary = "Generate Temporary Password", description = "Admin-only endpoint to generate and assign a temporary password for employee/manager accounts.")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Temporary password generated successfully"),
-        @ApiResponse(responseCode = "400", description = "Unsupported target role",
-            content = @Content(mediaType = "text/plain")),
-        @ApiResponse(responseCode = "403", description = "Only admin users can generate passwords",
-            content = @Content(mediaType = "text/plain")),
-        @ApiResponse(responseCode = "404", description = "User not found",
-            content = @Content(mediaType = "text/plain"))
+            @ApiResponse(responseCode = "200", description = "Temporary password generated successfully"),
+            @ApiResponse(responseCode = "400", description = "Unsupported target role", content = @Content(mediaType = "text/plain")),
+            @ApiResponse(responseCode = "403", description = "Only admin users can generate passwords", content = @Content(mediaType = "text/plain")),
+            @ApiResponse(responseCode = "404", description = "User not found", content = @Content(mediaType = "text/plain"))
     })
     public ResponseEntity<?> generateTemporaryPassword(
-                                                       @Parameter(description = "Username of target workforce user", required = true, example = "john.doe@company.com")
-                                                       @PathVariable String username,
-                                                       HttpServletRequest request) {
+            @Parameter(description = "Username of target workforce user", required = true, example = "john.doe@company.com") @PathVariable String username,
+            HttpServletRequest request) {
         if (!jwtHelper.isAdmin(request)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Only admin users can generate passwords");
         }
@@ -205,7 +194,8 @@ public class AuthController {
         UserAccount user = userOpt.get();
         String role = user.getRole() == null ? "" : user.getRole().trim().toLowerCase();
         if (!role.equals("employee") && !role.equals("manager")) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Temporary passwords are only supported for manager/employee accounts");
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Temporary passwords are only supported for manager/employee accounts");
         }
 
         String tempPassword = generateRandomPassword(10);
@@ -218,24 +208,16 @@ public class AuthController {
         return ResponseEntity.ok(Map.of(
                 "temporaryPassword", tempPassword,
                 "username", user.getUsername(),
-                "message", "Temporary password generated. Share this password securely with the employee."
-        ));
+                "message", "Temporary password generated. Share this password securely with the employee."));
     }
 
     @PostMapping("/auth/reset-temporary-password")
-    @Operation(
-        summary = "Reset Temporary Password",
-        description = "Completes first-login password change using the temporary password."
-    )
+    @Operation(summary = "Reset Temporary Password", description = "Completes first-login password change using the temporary password.")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Password updated successfully",
-            content = @Content(mediaType = "text/plain")),
-        @ApiResponse(responseCode = "400", description = "Invalid request payload or reset not required",
-            content = @Content(mediaType = "text/plain")),
-        @ApiResponse(responseCode = "401", description = "Temporary password is incorrect",
-            content = @Content(mediaType = "text/plain")),
-        @ApiResponse(responseCode = "404", description = "User not found",
-            content = @Content(mediaType = "text/plain"))
+            @ApiResponse(responseCode = "200", description = "Password updated successfully", content = @Content(mediaType = "text/plain")),
+            @ApiResponse(responseCode = "400", description = "Invalid request payload or reset not required", content = @Content(mediaType = "text/plain")),
+            @ApiResponse(responseCode = "401", description = "Temporary password is incorrect", content = @Content(mediaType = "text/plain")),
+            @ApiResponse(responseCode = "404", description = "User not found", content = @Content(mediaType = "text/plain"))
     })
     public ResponseEntity<?> resetTemporaryPassword(@RequestBody Map<String, String> requestBody) {
         String username = requestBody.getOrDefault("username", "").trim();
@@ -266,7 +248,8 @@ public class AuthController {
         }
 
         if (!user.isForcePasswordChange()) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Password reset is not required for this account");
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Password reset is not required for this account");
         }
 
         user.setPassword(passwordEncoder.encode(newPassword));
@@ -280,22 +263,15 @@ public class AuthController {
     }
 
     @GetMapping("/users/{username}")
-    @Operation(
-        summary = "Get User Profile",
-        description = "Retrieve user profile information by username"
-    )
+    @Operation(summary = "Get User Profile", description = "Retrieve user profile information by username")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "User profile retrieved successfully",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserResponse.class))),
-        @ApiResponse(responseCode = "404", description = "User not found",
-            content = @Content(mediaType = "text/plain")),
-        @ApiResponse(responseCode = "500", description = "Internal server error",
-            content = @Content(mediaType = "text/plain"))
+            @ApiResponse(responseCode = "200", description = "User profile retrieved successfully", content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserResponse.class))),
+            @ApiResponse(responseCode = "404", description = "User not found", content = @Content(mediaType = "text/plain")),
+            @ApiResponse(responseCode = "500", description = "Internal server error", content = @Content(mediaType = "text/plain"))
     })
     public ResponseEntity<?> getUserProfile(
-        @Parameter(description = "Username of the user", required = true, example = "admin")
-        @PathVariable String username,
-        HttpServletRequest request) {
+            @Parameter(description = "Username of the user", required = true, example = "admin") @PathVariable String username,
+            HttpServletRequest request) {
         if (!jwtHelper.isSelfOrAdmin(username, request)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Access denied");
         }
@@ -308,23 +284,16 @@ public class AuthController {
     }
 
     @PutMapping("/users/{username}")
-    @Operation(
-        summary = "Update User Profile",
-        description = "Update user profile information. Only mutable fields (phone, nationality, etc.) can be updated for employees. Immutable fields are preserved."
-    )
+    @Operation(summary = "Update User Profile", description = "Update user profile information. Only mutable fields (phone, nationality, etc.) can be updated for employees. Immutable fields are preserved.")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Profile updated successfully",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserResponse.class))),
-        @ApiResponse(responseCode = "404", description = "User not found",
-            content = @Content(mediaType = "text/plain")),
-        @ApiResponse(responseCode = "500", description = "Internal server error",
-            content = @Content(mediaType = "text/plain"))
+            @ApiResponse(responseCode = "200", description = "Profile updated successfully", content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserResponse.class))),
+            @ApiResponse(responseCode = "404", description = "User not found", content = @Content(mediaType = "text/plain")),
+            @ApiResponse(responseCode = "500", description = "Internal server error", content = @Content(mediaType = "text/plain"))
     })
     public ResponseEntity<?> updateUserProfile(
-        @Parameter(description = "Username of the user to update", required = true, example = "employee@company.com")
-        @PathVariable String username,
-        @RequestBody UserResponse request,
-        HttpServletRequest httpRequest) {
+            @Parameter(description = "Username of the user to update", required = true, example = "employee@company.com") @PathVariable String username,
+            @RequestBody UserResponse request,
+            HttpServletRequest httpRequest) {
         if (!jwtHelper.isSelfOrAdmin(username, httpRequest)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Access denied");
         }
@@ -335,16 +304,24 @@ public class AuthController {
         }
 
         UserAccount user = account.get();
+        Optional<String> profileValidationError = validateMutableProfileFields(
+                request.getNationality(),
+                request.getBloodGroup(),
+                request.getPersonalEmail());
+        if (profileValidationError.isPresent()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(profileValidationError.get());
+        }
+
         if (user.getRole() != null && user.getRole().equalsIgnoreCase("admin")) {
             user.setPhoneNumber(request.getPhoneNumber());
         } else {
             // Preserve immutable profile values for workforce users
             user.setPhoneNumber(request.getPhoneNumber());
-            user.setNationality(request.getNationality());
-            user.setBloodGroup(request.getBloodGroup());
+            user.setNationality(normalizeBlank(request.getNationality()));
+            user.setBloodGroup(normalizeBloodGroup(request.getBloodGroup()));
             user.setMaritalStatus(request.getMaritalStatus());
             user.setDob(request.getDob());
-            user.setPersonalEmail(request.getPersonalEmail());
+            user.setPersonalEmail(normalizeEmail(request.getPersonalEmail()));
             user.setGender(request.getGender());
             user.setAddress(request.getAddress());
         }
@@ -357,22 +334,15 @@ public class AuthController {
     }
 
     @PostMapping("/users")
-    @Operation(
-        summary = "Create New User",
-        description = "Create a new user account. For employees, auto-generates employee ID if not provided. Joining date cannot be in the future and must be within the last 7 days (or defaults to today)."
-    )
+    @Operation(summary = "Create New User", description = "Create a new user account. For employees, auto-generates employee ID if not provided. Joining date cannot be in the future and must be within the last 7 days (or defaults to today).")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "201", description = "User created successfully",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserResponse.class))),
-        @ApiResponse(responseCode = "400", description = "Invalid input",
-            content = @Content(mediaType = "text/plain")),
-        @ApiResponse(responseCode = "409", description = "Username or Employee ID already exists",
-            content = @Content(mediaType = "text/plain")),
-        @ApiResponse(responseCode = "500", description = "Internal server error",
-            content = @Content(mediaType = "text/plain"))
+            @ApiResponse(responseCode = "201", description = "User created successfully", content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid input", content = @Content(mediaType = "text/plain")),
+            @ApiResponse(responseCode = "409", description = "Username or Employee ID already exists", content = @Content(mediaType = "text/plain")),
+            @ApiResponse(responseCode = "500", description = "Internal server error", content = @Content(mediaType = "text/plain"))
     })
     public ResponseEntity<?> createUser(@RequestBody CreateUserRequest request,
-                                        HttpServletRequest requestContext) {
+            HttpServletRequest requestContext) {
         if (!jwtHelper.isAdmin(requestContext)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Only admin users can create accounts");
         }
@@ -383,7 +353,8 @@ public class AuthController {
         boolean isAdminRole = requestedRole.equalsIgnoreCase("admin");
 
         if (!isEmployeeRole && !isManagerRole && !isAdminRole) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Role must be one of admin, manager, or employee");
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Role must be one of admin, manager, or employee");
         }
 
         if (userRepository.findByUsername(request.getUsername()).isPresent()) {
@@ -412,9 +383,9 @@ public class AuthController {
             }
 
             String reportingId = request.getReportingEmployeeId().trim();
-            boolean managerExists = managers.stream().anyMatch(manager ->
-                    equalsIgnoreCase(reportingId, manager.getEmployeeId()) ||
-                    equalsIgnoreCase(reportingId, manager.getUsername()));
+            boolean managerExists = managers.stream()
+                    .anyMatch(manager -> equalsIgnoreCase(reportingId, manager.getEmployeeId()) ||
+                            equalsIgnoreCase(reportingId, manager.getUsername()));
             if (!managerExists) {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                         .body("Reporting manager does not exist");
@@ -447,12 +418,24 @@ public class AuthController {
                     .body("Joining date cannot be older than 7 days from today");
         }
 
+        Optional<String> profileValidationError = validateMutableProfileFields(
+                request.getNationality(),
+                request.getBloodGroup(),
+                request.getPersonalEmail());
+        if (profileValidationError.isPresent()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(profileValidationError.get());
+        }
+
         UserAccount user = new UserAccount();
         user.setUsername(request.getUsername());
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setRole(request.getRole());
-        String resolvedEmployeeId = request.getRole() != null && (request.getRole().equalsIgnoreCase("employee") || request.getRole().equalsIgnoreCase("manager")) ?
-            (request.getEmployeeId() != null && !request.getEmployeeId().isBlank() ? request.getEmployeeId() : generateNextEmployeeId()) : null;
+        String resolvedEmployeeId = request.getRole() != null
+                && (request.getRole().equalsIgnoreCase("employee") || request.getRole().equalsIgnoreCase("manager"))
+                        ? (request.getEmployeeId() != null && !request.getEmployeeId().isBlank()
+                                ? request.getEmployeeId()
+                                : generateNextEmployeeId())
+                        : null;
         user.setEmployeeId(resolvedEmployeeId);
         user.setEmailId(request.getEmailId());
         user.setFirstName(request.getFirstName());
@@ -463,30 +446,29 @@ public class AuthController {
         user.setLocation(request.getLocation());
         user.setJoining(joiningDate.toString());
         user.setPhoneNumber(request.getPhoneNumber());
-        user.setNationality(request.getNationality());
-        user.setBloodGroup(request.getBloodGroup());
+        user.setNationality(normalizeBlank(request.getNationality()));
+        user.setBloodGroup(normalizeBloodGroup(request.getBloodGroup()));
         user.setMaritalStatus(request.getMaritalStatus());
         user.setDob(request.getDob());
-        user.setPersonalEmail(request.getPersonalEmail());
+        user.setPersonalEmail(normalizeEmail(request.getPersonalEmail()));
         user.setGender(request.getGender());
         user.setAddress(request.getAddress());
 
         if (supabaseAuthService.isEnabled() && isEmail(user.getUsername())) {
             supabaseAuthService.createSupabaseUser(
-                user.getUsername(),
-                request.getPassword(),
-                user.getRole(),
-                resolvedEmployeeId,
-                user.getFirstName(),
-                user.getLastName()
-            );
+                    user.getUsername(),
+                    request.getPassword(),
+                    user.getRole(),
+                    resolvedEmployeeId,
+                    user.getFirstName(),
+                    user.getLastName());
         }
 
         userRepository.save(user);
 
         // Auto-sync leave tracker for employee/manager workforce accounts
         if (user.getRole() != null &&
-            (user.getRole().equalsIgnoreCase("employee") || user.getRole().equalsIgnoreCase("manager"))) {
+                (user.getRole().equalsIgnoreCase("employee") || user.getRole().equalsIgnoreCase("manager"))) {
             leaveTrackerService.syncLeaveTrackerForEmployee(user, 0, 0, 0);
         }
 
@@ -511,15 +493,10 @@ public class AuthController {
     }
 
     @GetMapping("/users")
-    @Operation(
-        summary = "Get All Users",
-        description = "Retrieve a list of all users in the system"
-    )
+    @Operation(summary = "Get All Users", description = "Retrieve a list of all users in the system")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Users retrieved successfully",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserResponse.class))),
-        @ApiResponse(responseCode = "500", description = "Internal server error",
-            content = @Content(mediaType = "text/plain"))
+            @ApiResponse(responseCode = "200", description = "Users retrieved successfully", content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserResponse.class))),
+            @ApiResponse(responseCode = "500", description = "Internal server error", content = @Content(mediaType = "text/plain"))
     })
     public ResponseEntity<List<UserResponse>> getAllUsers(HttpServletRequest request) {
         if (!jwtHelper.isAdmin(request)) {
@@ -532,15 +509,10 @@ public class AuthController {
     }
 
     @GetMapping("/users/next-employee-id")
-    @Operation(
-        summary = "Get Next Employee ID",
-        description = "Generate and retrieve the next sequential employee ID (admin only). Returns ID in format LP-XXX."
-    )
+    @Operation(summary = "Get Next Employee ID", description = "Generate and retrieve the next sequential employee ID (admin only). Returns ID in format LP-XXX.")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Next employee ID generated successfully",
-            content = @Content(mediaType = "application/json")),
-        @ApiResponse(responseCode = "403", description = "Only admin users can access this endpoint",
-            content = @Content(mediaType = "text/plain"))
+            @ApiResponse(responseCode = "200", description = "Next employee ID generated successfully", content = @Content(mediaType = "application/json")),
+            @ApiResponse(responseCode = "403", description = "Only admin users can access this endpoint", content = @Content(mediaType = "text/plain"))
     })
     public ResponseEntity<?> getNextEmployeeId(HttpServletRequest request) {
         if (!jwtHelper.isAdmin(request)) {
@@ -552,15 +524,10 @@ public class AuthController {
     }
 
     @GetMapping("/users/subordinates")
-    @Operation(
-        summary = "Get Subordinates",
-        description = "Retrieve employees reporting to the current manager. Admin users receive all employees."
-    )
+    @Operation(summary = "Get Subordinates", description = "Retrieve employees reporting to the current manager. Admin users receive all employees.")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Subordinates retrieved successfully",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserResponse.class))),
-        @ApiResponse(responseCode = "403", description = "Access denied",
-            content = @Content(mediaType = "text/plain"))
+            @ApiResponse(responseCode = "200", description = "Subordinates retrieved successfully", content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Access denied", content = @Content(mediaType = "text/plain"))
     })
     public ResponseEntity<?> getSubordinates(HttpServletRequest request) {
         String username = jwtHelper.extractUsername(request);
@@ -662,24 +629,16 @@ public class AuthController {
     }
 
     @DeleteMapping("/users/{username}")
-    @Operation(
-        summary = "Delete Workforce User",
-        description = "Delete an employee or manager account by username (admin only). Also removes linked leave tracker data when present."
-    )
+    @Operation(summary = "Delete Workforce User", description = "Delete an employee or manager account by username (admin only). Also removes linked leave tracker data when present.")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "User deleted successfully",
-            content = @Content(mediaType = "text/plain")),
-        @ApiResponse(responseCode = "403", description = "Only admin users can delete workforce accounts",
-            content = @Content(mediaType = "text/plain")),
-        @ApiResponse(responseCode = "404", description = "User not found",
-            content = @Content(mediaType = "text/plain")),
-        @ApiResponse(responseCode = "409", description = "Manager has linked subordinates",
-            content = @Content(mediaType = "text/plain"))
+            @ApiResponse(responseCode = "200", description = "User deleted successfully", content = @Content(mediaType = "text/plain")),
+            @ApiResponse(responseCode = "403", description = "Only admin users can delete workforce accounts", content = @Content(mediaType = "text/plain")),
+            @ApiResponse(responseCode = "404", description = "User not found", content = @Content(mediaType = "text/plain")),
+            @ApiResponse(responseCode = "409", description = "Manager has linked subordinates", content = @Content(mediaType = "text/plain"))
     })
     public ResponseEntity<String> deleteUser(
-        @Parameter(description = "Username of the employee account", required = true, example = "john.doe@company.com")
-        @PathVariable String username,
-        HttpServletRequest request) {
+            @Parameter(description = "Username of the employee account", required = true, example = "john.doe@company.com") @PathVariable String username,
+            HttpServletRequest request) {
         if (!jwtHelper.isAdmin(request)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Only admin users can delete workforce accounts");
         }
@@ -696,7 +655,8 @@ public class AuthController {
 
         UserAccount user = account.get();
         if (user.getRole() != null && user.getRole().equalsIgnoreCase("admin")) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Admin accounts cannot be deleted from this screen");
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body("Admin accounts cannot be deleted from this screen");
         }
 
         if (user.getRole() != null && user.getRole().equalsIgnoreCase("manager")) {
@@ -704,10 +664,12 @@ public class AuthController {
             String managerUsername = user.getUsername();
 
             boolean hasLinkedSubordinates = userRepository.findAll().stream()
-                    .filter(candidate -> candidate.getRole() != null && candidate.getRole().equalsIgnoreCase("employee"))
+                    .filter(candidate -> candidate.getRole() != null
+                            && candidate.getRole().equalsIgnoreCase("employee"))
                     .map(UserAccount::getReportingEmployeeId)
                     .filter(Objects::nonNull)
-                    .anyMatch(reporting -> equalsIgnoreCase(reporting, managerEmployeeId) || equalsIgnoreCase(reporting, managerUsername));
+                    .anyMatch(reporting -> equalsIgnoreCase(reporting, managerEmployeeId)
+                            || equalsIgnoreCase(reporting, managerUsername));
 
             if (hasLinkedSubordinates) {
                 return ResponseEntity.status(HttpStatus.CONFLICT)
@@ -790,12 +752,12 @@ public class AuthController {
         }
         if (manager.isEmpty()) {
             manager = userRepository.findAll().stream()
-                .filter(candidate -> {
-                String fullName = ((candidate.getFirstName() == null ? "" : candidate.getFirstName()) + " "
-                    + (candidate.getLastName() == null ? "" : candidate.getLastName())).trim();
-                return !fullName.isEmpty() && equalsIgnoreCase(fullName, normalizedReporting);
-                })
-                .findFirst();
+                    .filter(candidate -> {
+                        String fullName = ((candidate.getFirstName() == null ? "" : candidate.getFirstName()) + " "
+                                + (candidate.getLastName() == null ? "" : candidate.getLastName())).trim();
+                        return !fullName.isEmpty() && equalsIgnoreCase(fullName, normalizedReporting);
+                    })
+                    .findFirst();
         }
 
         if (manager.isEmpty()) {
@@ -804,10 +766,10 @@ public class AuthController {
 
         UserAccount managerUser = manager.get();
         String managerName = ((managerUser.getFirstName() == null ? "" : managerUser.getFirstName()) + " "
-            + (managerUser.getLastName() == null ? "" : managerUser.getLastName())).trim();
+                + (managerUser.getLastName() == null ? "" : managerUser.getLastName())).trim();
         String managerIdentifier = (managerUser.getEmployeeId() != null && !managerUser.getEmployeeId().isBlank())
-            ? managerUser.getEmployeeId()
-            : managerUser.getUsername();
+                ? managerUser.getEmployeeId()
+                : managerUser.getUsername();
 
         response.setReportingEmployeeId(managerIdentifier);
         response.setReportingUsername(managerUser.getUsername());
@@ -817,9 +779,9 @@ public class AuthController {
     }
 
     private void enrichReportingManagerContext(UserResponse response,
-                                              Map<String, UserAccount> byEmployeeId,
-                                              Map<String, UserAccount> byUsername,
-                                              Map<String, UserAccount> byFullName) {
+            Map<String, UserAccount> byEmployeeId,
+            Map<String, UserAccount> byUsername,
+            Map<String, UserAccount> byFullName) {
         if (response == null) {
             return;
         }
@@ -862,6 +824,43 @@ public class AuthController {
         return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
     }
 
+    private String normalizeBlank(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String normalizeEmail(String value) {
+        String normalized = normalizeBlank(value);
+        return normalized == null ? null : normalized.toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizeBloodGroup(String value) {
+        String normalized = normalizeBlank(value);
+        return normalized == null ? null : normalized.toUpperCase(Locale.ROOT);
+    }
+
+    private Optional<String> validateMutableProfileFields(String nationality, String bloodGroup, String personalEmail) {
+        String normalizedNationality = normalizeBlank(nationality);
+        if (normalizedNationality != null && !NATIONALITY_PATTERN.matcher(normalizedNationality).matches()) {
+            return Optional.of("Nationality must contain only letters and spaces");
+        }
+
+        String normalizedBloodGroup = normalizeBloodGroup(bloodGroup);
+        if (normalizedBloodGroup != null && !BLOOD_GROUP_PATTERN.matcher(normalizedBloodGroup).matches()) {
+            return Optional.of("Blood group must be one of A+, A-, B+, B-, AB+, AB-, O+, or O-");
+        }
+
+        String normalizedPersonalEmail = normalizeEmail(personalEmail);
+        if (normalizedPersonalEmail != null && !EMAIL_PATTERN.matcher(normalizedPersonalEmail).matches()) {
+            return Optional.of("Personal email must be a valid lowercase email address");
+        }
+
+        return Optional.empty();
+    }
+
     private boolean isEmail(String value) {
         return value != null && value.contains("@");
     }
@@ -875,5 +874,3 @@ public class AuthController {
         return builder.toString();
     }
 }
-
-

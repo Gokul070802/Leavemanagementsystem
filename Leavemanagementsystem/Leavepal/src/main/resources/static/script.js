@@ -96,8 +96,12 @@ document.addEventListener('DOMContentLoaded', function() {
             try {
                 await attemptLogin(username, password, selectedRole);
                         const emailRegex = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
-                        if (!emailRegex.test(username)) {
-                            notify('Please enter a valid email address.', 'warning');
+                        const usernameRegex = /^[A-Za-z0-9._-]+$/;
+                        const isValidLoginId = username.includes('@')
+                            ? emailRegex.test(username)
+                            : usernameRegex.test(username) && !username.includes(',');
+                        if (!isValidLoginId) {
+                            notify('Please enter a valid email address or username.', 'warning');
                             return;
                         }
                         if (password.length < 6) {

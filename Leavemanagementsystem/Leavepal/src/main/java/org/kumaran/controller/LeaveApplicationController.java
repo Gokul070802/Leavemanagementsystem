@@ -1,6 +1,17 @@
 package org.kumaran.controller;
 
-import jakarta.servlet.http.HttpServletRequest;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.Base64;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
 import org.kumaran.entity.AppNotification;
 import org.kumaran.entity.LeaveApplication;
 import org.kumaran.entity.LeaveTrackerData;
@@ -15,7 +26,14 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -24,13 +42,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
-
-import java.time.Instant;
-import java.time.LocalDate;
-import java.util.*;
-import java.util.stream.Stream;
-import java.util.stream.Collectors;
-import java.util.Base64;
+import jakarta.servlet.http.HttpServletRequest;
 
 @RestController
 @RequestMapping("/api/leave-applications")
@@ -43,10 +55,10 @@ public class LeaveApplicationController {
     private final JwtRequestHelper jwtHelper;
 
     public LeaveApplicationController(LeaveApplicationRepository leaveApplicationRepository,
-                                      UserAccountRepository userRepository,
-                                      AppNotificationRepository appNotificationRepository,
-                                      LeaveTrackerService leaveTrackerService,
-                                      JwtRequestHelper jwtHelper) {
+            UserAccountRepository userRepository,
+            AppNotificationRepository appNotificationRepository,
+            LeaveTrackerService leaveTrackerService,
+            JwtRequestHelper jwtHelper) {
         this.leaveApplicationRepository = leaveApplicationRepository;
         this.userRepository = userRepository;
         this.appNotificationRepository = appNotificationRepository;
@@ -55,19 +67,12 @@ public class LeaveApplicationController {
     }
 
     @PostMapping
-    @Operation(
-        summary = "Apply Leave",
-        description = "Creates a new leave request for employee/manager users. Sick leave for 3 or more days requires a medical attachment."
-    )
+    @Operation(summary = "Apply Leave", description = "Creates a new leave request for employee/manager users. Sick leave for 3 or more days requires a medical attachment.")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "201", description = "Leave request created successfully",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = LeaveApplication.class))),
-        @ApiResponse(responseCode = "400", description = "Invalid leave payload or reporting manager mapping issue",
-            content = @Content(mediaType = "text/plain")),
-        @ApiResponse(responseCode = "401", description = "Unauthorized",
-            content = @Content(mediaType = "text/plain")),
-        @ApiResponse(responseCode = "403", description = "Role is not allowed to apply leave",
-            content = @Content(mediaType = "text/plain"))
+            @ApiResponse(responseCode = "201", description = "Leave request created successfully", content = @Content(mediaType = "application/json", schema = @Schema(implementation = LeaveApplication.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid leave payload or reporting manager mapping issue", content = @Content(mediaType = "text/plain")),
+            @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(mediaType = "text/plain")),
+            @ApiResponse(responseCode = "403", description = "Role is not allowed to apply leave", content = @Content(mediaType = "text/plain"))
     })
     public ResponseEntity<?> applyLeave(@RequestBody LeaveApplication request, HttpServletRequest httpRequest) {
         Optional<UserAccount> actorOpt = jwtHelper.getActor(httpRequest);
@@ -78,7 +83,8 @@ public class LeaveApplicationController {
         UserAccount actor = actorOpt.get();
         String role = safeLower(actor.getRole());
         if (!role.equals("employee") && !role.equals("manager")) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Only employee and manager accounts can apply leave");
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body("Only employee and manager accounts can apply leave");
         }
 
         if (request.getLeaveType() == null || request.getLeaveType().isBlank()
@@ -107,15 +113,13 @@ public class LeaveApplicationController {
         Optional<String> leaveDateError = validateLeaveDateWindow(
                 normalizedLeaveType,
                 request.getFromDate(),
-                request.getToDate()
-        );
+                request.getToDate());
         if (leaveDateError.isPresent()) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(leaveDateError.get());
         }
 
-        Optional<String> applyBalanceError = validateLeaveBalanceFor(actor, normalizedLeaveType, request.getDuration());
-        if (applyBalanceError.isPresent()) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(applyBalanceError.get());
+        if (!hasValidLeaveTracker(actor, normalizedLeaveType)) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Unable to validate leave balance for employee");
         }
 
         LeaveApplication entity = new LeaveApplication();
@@ -154,22 +158,16 @@ public class LeaveApplicationController {
                 "New Leave Request",
                 entity.getEmployeeName() + " submitted a " + formatLeaveType(entity.getLeaveType())
                         + " request (" + entity.getDuration() + " day" + (entity.getDuration() > 1 ? "s" : "") + ").",
-                "leave-request-submitted"
-        ));
+                "leave-request-submitted"));
 
         return ResponseEntity.status(HttpStatus.CREATED).body(saved);
     }
 
     @GetMapping("/my")
-    @Operation(
-        summary = "Get My Leave Applications",
-        description = "Returns leave requests for the currently authenticated user (matched by employeeId/username/emailId)."
-    )
+    @Operation(summary = "Get My Leave Applications", description = "Returns leave requests for the currently authenticated user (matched by employeeId/username/emailId).")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Leave requests retrieved successfully",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = LeaveApplication.class))),
-        @ApiResponse(responseCode = "401", description = "Unauthorized",
-            content = @Content(mediaType = "text/plain"))
+            @ApiResponse(responseCode = "200", description = "Leave requests retrieved successfully", content = @Content(mediaType = "application/json", schema = @Schema(implementation = LeaveApplication.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(mediaType = "text/plain"))
     })
     public ResponseEntity<?> getMyApplications(HttpServletRequest httpRequest) {
         Optional<UserAccount> actorOpt = jwtHelper.getActor(httpRequest);
@@ -182,22 +180,16 @@ public class LeaveApplicationController {
                 .findByEmployeeIdOrUsernameOrEmailIdOrderByCreatedAtDesc(
                         actor.getEmployeeId(),
                         actor.getUsername(),
-                        actor.getEmailId()
-                );
+                        actor.getEmailId());
 
         return ResponseEntity.ok(rows);
     }
 
     @GetMapping("/all")
-    @Operation(
-        summary = "Get All Leave Applications",
-        description = "Admin-only endpoint that returns every leave request in the system."
-    )
+    @Operation(summary = "Get All Leave Applications", description = "Admin-only endpoint that returns every leave request in the system.")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "All leave requests retrieved successfully",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = LeaveApplication.class))),
-        @ApiResponse(responseCode = "403", description = "Access denied",
-            content = @Content(mediaType = "text/plain"))
+            @ApiResponse(responseCode = "200", description = "All leave requests retrieved successfully", content = @Content(mediaType = "application/json", schema = @Schema(implementation = LeaveApplication.class))),
+            @ApiResponse(responseCode = "403", description = "Access denied", content = @Content(mediaType = "text/plain"))
     })
     public ResponseEntity<?> getAllApplications(HttpServletRequest request) {
         if (!jwtHelper.isAdmin(request)) {
@@ -207,17 +199,11 @@ public class LeaveApplicationController {
     }
 
     @GetMapping("/manager")
-    @Operation(
-        summary = "Get Manager Review Queue",
-        description = "Returns leave requests that belong to a manager's subordinates and direct manager-routed requests."
-    )
+    @Operation(summary = "Get Manager Review Queue", description = "Returns leave requests that belong to a manager's subordinates and direct manager-routed requests.")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Manager leave queue retrieved successfully",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = LeaveApplication.class))),
-        @ApiResponse(responseCode = "401", description = "Unauthorized",
-            content = @Content(mediaType = "text/plain")),
-        @ApiResponse(responseCode = "403", description = "Access denied",
-            content = @Content(mediaType = "text/plain"))
+            @ApiResponse(responseCode = "200", description = "Manager leave queue retrieved successfully", content = @Content(mediaType = "application/json", schema = @Schema(implementation = LeaveApplication.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(mediaType = "text/plain")),
+            @ApiResponse(responseCode = "403", description = "Access denied", content = @Content(mediaType = "text/plain"))
     })
     public ResponseEntity<?> getManagerApplications(HttpServletRequest request) {
         Optional<UserAccount> actorOpt = jwtHelper.getActor(request);
@@ -232,14 +218,14 @@ public class LeaveApplicationController {
 
         List<UserAccount> workforceUsers = userRepository.findByRoleIgnoreCaseIn(List.of("employee", "manager"));
         List<UserAccount> subordinateUsers = workforceUsers.stream()
-            .filter(user -> isSubordinateOf(user, manager))
-            .toList();
+                .filter(user -> isSubordinateOf(user, manager))
+                .toList();
 
         Set<String> subordinateKeys = subordinateUsers.stream()
                 .flatMap(user -> Stream.of(user.getEmployeeId(), user.getUsername(), user.getEmailId()))
                 .filter(Objects::nonNull)
                 .map(this::normalizeKey)
-            .filter(value -> !value.isBlank())
+                .filter(value -> !value.isBlank())
                 .collect(Collectors.toSet());
 
         Set<String> workforceKeys = workforceUsers.stream()
@@ -250,70 +236,65 @@ public class LeaveApplicationController {
                 .collect(Collectors.toSet());
 
         Map<String, UserAccount> workforceByEmployeeId = workforceUsers.stream()
-            .filter(user -> normalizeBlank(user.getEmployeeId()) != null)
-            .collect(Collectors.toMap(
-                user -> normalizeKey(user.getEmployeeId()),
-                user -> user,
-                (existing, replacement) -> existing
-            ));
+                .filter(user -> normalizeBlank(user.getEmployeeId()) != null)
+                .collect(Collectors.toMap(
+                        user -> normalizeKey(user.getEmployeeId()),
+                        user -> user,
+                        (existing, replacement) -> existing));
 
         Map<String, UserAccount> workforceByUsername = workforceUsers.stream()
-            .filter(user -> normalizeBlank(user.getUsername()) != null)
-            .collect(Collectors.toMap(
-                user -> normalizeKey(user.getUsername()),
-                user -> user,
-                (existing, replacement) -> existing
-            ));
+                .filter(user -> normalizeBlank(user.getUsername()) != null)
+                .collect(Collectors.toMap(
+                        user -> normalizeKey(user.getUsername()),
+                        user -> user,
+                        (existing, replacement) -> existing));
 
         Map<String, UserAccount> workforceByEmail = workforceUsers.stream()
-            .filter(user -> normalizeBlank(user.getEmailId()) != null)
-            .collect(Collectors.toMap(
-                user -> normalizeKey(user.getEmailId()),
-                user -> user,
-                (existing, replacement) -> existing
-            ));
+                .filter(user -> normalizeBlank(user.getEmailId()) != null)
+                .collect(Collectors.toMap(
+                        user -> normalizeKey(user.getEmailId()),
+                        user -> user,
+                        (existing, replacement) -> existing));
 
         Set<String> managerKeys = buildManagerKeys(manager);
 
         Set<String> subordinateEmployeeIds = subordinateUsers.stream()
-            .map(UserAccount::getEmployeeId)
-            .filter(Objects::nonNull)
-            .map(this::normalizeKey)
-            .filter(value -> !value.isBlank())
-            .collect(Collectors.toSet());
+                .map(UserAccount::getEmployeeId)
+                .filter(Objects::nonNull)
+                .map(this::normalizeKey)
+                .filter(value -> !value.isBlank())
+                .collect(Collectors.toSet());
 
         Set<String> subordinateUsernames = subordinateUsers.stream()
-            .map(UserAccount::getUsername)
-            .filter(Objects::nonNull)
-            .map(this::normalizeKey)
-            .filter(value -> !value.isBlank())
-            .collect(Collectors.toSet());
+                .map(UserAccount::getUsername)
+                .filter(Objects::nonNull)
+                .map(this::normalizeKey)
+                .filter(value -> !value.isBlank())
+                .collect(Collectors.toSet());
 
         Set<String> subordinateEmails = subordinateUsers.stream()
-            .map(UserAccount::getEmailId)
-            .filter(Objects::nonNull)
-            .map(this::normalizeKey)
-            .filter(value -> !value.isBlank())
-            .collect(Collectors.toSet());
+                .map(UserAccount::getEmailId)
+                .filter(Objects::nonNull)
+                .map(this::normalizeKey)
+                .filter(value -> !value.isBlank())
+                .collect(Collectors.toSet());
 
         List<LeaveApplication> candidates = leaveApplicationRepository.findManagerQueueCandidates(
-            nonEmptySetOrPlaceholder(subordinateEmployeeIds),
-            nonEmptySetOrPlaceholder(subordinateUsernames),
-            nonEmptySetOrPlaceholder(subordinateEmails),
-            nonEmptySetOrPlaceholder(managerKeys),
-            nonEmptySetOrPlaceholder(managerKeys),
-            nonEmptySetOrPlaceholder(managerKeys),
-            nonEmptySetOrPlaceholder(managerKeys)
-        );
+                nonEmptySetOrPlaceholder(subordinateEmployeeIds),
+                nonEmptySetOrPlaceholder(subordinateUsernames),
+                nonEmptySetOrPlaceholder(subordinateEmails),
+                nonEmptySetOrPlaceholder(managerKeys),
+                nonEmptySetOrPlaceholder(managerKeys),
+                nonEmptySetOrPlaceholder(managerKeys),
+                nonEmptySetOrPlaceholder(managerKeys));
 
         List<LeaveApplication> result = candidates.stream()
                 .filter(app -> belongsToKnownWorkforceUser(app, workforceKeys))
-            .filter(app -> mapsToCurrentWorkforceIdentity(
-                app,
-                workforceByEmployeeId,
-                workforceByUsername,
-                workforceByEmail
-            ))
+                .filter(app -> mapsToCurrentWorkforceIdentity(
+                        app,
+                        workforceByEmployeeId,
+                        workforceByUsername,
+                        workforceByEmail))
                 .filter(app -> belongsToSubordinate(app, subordinateKeys) || belongsToManager(app, managerKeys))
                 .toList();
 
@@ -321,25 +302,18 @@ public class LeaveApplicationController {
     }
 
     @PatchMapping("/{id}/status")
-    @Operation(
-        summary = "Update Leave Request Status",
-        description = "Approves or rejects a pending leave request. Allowed for admins and authorized managers."
-    )
+    @Operation(summary = "Update Leave Request Status", description = "Approves or rejects a pending leave request. Allowed for admins and authorized managers.")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Leave status updated successfully",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = LeaveApplication.class))),
-        @ApiResponse(responseCode = "400", description = "Invalid status transition or invalid payload",
-            content = @Content(mediaType = "text/plain")),
-        @ApiResponse(responseCode = "401", description = "Unauthorized",
-            content = @Content(mediaType = "text/plain")),
-        @ApiResponse(responseCode = "403", description = "Access denied",
-            content = @Content(mediaType = "text/plain")),
-        @ApiResponse(responseCode = "404", description = "Leave request not found",
-            content = @Content(mediaType = "text/plain"))
+            @ApiResponse(responseCode = "200", description = "Leave status updated successfully", content = @Content(mediaType = "application/json", schema = @Schema(implementation = LeaveApplication.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid status transition or invalid payload", content = @Content(mediaType = "text/plain")),
+            @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(mediaType = "text/plain")),
+            @ApiResponse(responseCode = "403", description = "Access denied", content = @Content(mediaType = "text/plain")),
+            @ApiResponse(responseCode = "404", description = "Leave request not found", content = @Content(mediaType = "text/plain"))
     })
-    public ResponseEntity<?> updateStatus(@Parameter(description = "Leave request ID", required = true, example = "101") @PathVariable Long id,
-                                          @RequestBody Map<String, String> requestBody,
-                                          HttpServletRequest request) {
+    public ResponseEntity<?> updateStatus(
+            @Parameter(description = "Leave request ID", required = true, example = "101") @PathVariable Long id,
+            @RequestBody Map<String, String> requestBody,
+            HttpServletRequest request) {
         Optional<UserAccount> actorOpt = jwtHelper.getActor(request);
         if (actorOpt.isEmpty()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Unauthorized");
@@ -374,7 +348,7 @@ public class LeaveApplicationController {
 
         if (!previousStatus.equals("pending")) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body("Only pending requests can be approved or rejected");
+                    .body("Only pending requests can be approved or rejected");
         }
 
         if (status.equals("APPROVED")) {
@@ -384,13 +358,9 @@ public class LeaveApplicationController {
                         .body("Cannot approve leave request: employee record not found");
             }
 
-            Optional<String> approvalBalanceError = validateLeaveBalanceFor(
-                    employeeOpt.get(),
-                    safeLower(app.getLeaveType()),
-                    app.getDuration()
-            );
-            if (approvalBalanceError.isPresent()) {
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(approvalBalanceError.get());
+            if (!hasValidLeaveTracker(employeeOpt.get(), safeLower(app.getLeaveType()))) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body("Unable to validate leave balance for employee");
             }
         }
 
@@ -403,9 +373,8 @@ public class LeaveApplicationController {
         LeaveApplication saved = leaveApplicationRepository.save(app);
 
         if (status.equals("APPROVED")) {
-            findEmployeeForApplication(app).ifPresent(employee ->
-                    leaveTrackerService.updateLeaveTrackerBookingOnApproval(employee)
-            );
+            findEmployeeForApplication(app)
+                    .ifPresent(employee -> leaveTrackerService.updateLeaveTrackerBookingOnApproval(employee));
         }
 
         createNotification(
@@ -413,32 +382,26 @@ public class LeaveApplicationController {
                 status.equals("APPROVED") ? "Leave Request Approved" : "Leave Request Rejected",
                 status.equals("APPROVED")
                         ? "Your leave request (" + formatLeaveType(app.getLeaveType()) + ") has been approved."
-                        : "Your leave request (" + formatLeaveType(app.getLeaveType()) + ") has been rejected. " + (comment.isBlank() ? "" : "Reason: " + comment),
-                status.equals("APPROVED") ? "leave-approved" : "leave-rejected"
-        );
+                        : "Your leave request (" + formatLeaveType(app.getLeaveType()) + ") has been rejected. "
+                                + (comment.isBlank() ? "" : "Reason: " + comment),
+                status.equals("APPROVED") ? "leave-approved" : "leave-rejected");
 
         return ResponseEntity.ok(saved);
     }
 
     @GetMapping("/{id}/attachment")
-    @Operation(
-        summary = "View or Download Medical Attachment",
-        description = "Returns the medical attachment for a leave request. Set download=true for attachment disposition."
-    )
+    @Operation(summary = "View or Download Medical Attachment", description = "Returns the medical attachment for a leave request. Set download=true for attachment disposition.")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Attachment returned successfully"),
-        @ApiResponse(responseCode = "400", description = "Attachment content is invalid",
-            content = @Content(mediaType = "text/plain")),
-        @ApiResponse(responseCode = "401", description = "Unauthorized",
-            content = @Content(mediaType = "text/plain")),
-        @ApiResponse(responseCode = "403", description = "Access denied",
-            content = @Content(mediaType = "text/plain")),
-        @ApiResponse(responseCode = "404", description = "Leave request or attachment not found",
-            content = @Content(mediaType = "text/plain"))
+            @ApiResponse(responseCode = "200", description = "Attachment returned successfully"),
+            @ApiResponse(responseCode = "400", description = "Attachment content is invalid", content = @Content(mediaType = "text/plain")),
+            @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(mediaType = "text/plain")),
+            @ApiResponse(responseCode = "403", description = "Access denied", content = @Content(mediaType = "text/plain")),
+            @ApiResponse(responseCode = "404", description = "Leave request or attachment not found", content = @Content(mediaType = "text/plain"))
     })
-    public ResponseEntity<?> getSickAttachment(@Parameter(description = "Leave request ID", required = true, example = "101") @PathVariable Long id,
-                                               @RequestParam(name = "download", defaultValue = "false") boolean download,
-                                               HttpServletRequest request) {
+    public ResponseEntity<?> getSickAttachment(
+            @Parameter(description = "Leave request ID", required = true, example = "101") @PathVariable Long id,
+            @RequestParam(name = "download", defaultValue = "false") boolean download,
+            HttpServletRequest request) {
         Optional<UserAccount> actorOpt = jwtHelper.getActor(request);
         if (actorOpt.isEmpty()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Unauthorized");
@@ -491,8 +454,8 @@ public class LeaveApplicationController {
         Set<String> managerKeys = buildManagerKeys(manager);
         return managerKeys.contains(normalizeKey(app.getReportingManagerId()))
                 || managerKeys.contains(normalizeKey(app.getReportingManagerUsername()))
-            || managerKeys.contains(normalizeKey(app.getReportingManagerEmail()))
-            || managerKeys.contains(normalizeKey(app.getReportingManagerName()));
+                || managerKeys.contains(normalizeKey(app.getReportingManagerEmail()))
+                || managerKeys.contains(normalizeKey(app.getReportingManagerName()));
     }
 
     private boolean belongsToSubordinate(LeaveApplication app, Set<String> subordinateKeys) {
@@ -515,9 +478,9 @@ public class LeaveApplicationController {
     }
 
     private boolean mapsToCurrentWorkforceIdentity(LeaveApplication app,
-                                                   Map<String, UserAccount> workforceByEmployeeId,
-                                                   Map<String, UserAccount> workforceByUsername,
-                                                   Map<String, UserAccount> workforceByEmail) {
+            Map<String, UserAccount> workforceByEmployeeId,
+            Map<String, UserAccount> workforceByUsername,
+            Map<String, UserAccount> workforceByEmail) {
         String employeeIdKey = normalizeKey(app.getEmployeeId());
         String usernameKey = normalizeKey(app.getUsername());
         String emailKey = normalizeKey(app.getEmailId());
@@ -541,7 +504,8 @@ public class LeaveApplicationController {
         String targetUsername = normalizeKey(target.getUsername());
         String targetEmail = normalizeKey(target.getEmailId());
 
-        // If any key is present on the leave row, it must match the mapped current workforce record.
+        // If any key is present on the leave row, it must match the mapped current
+        // workforce record.
         if (!employeeIdKey.isBlank() && !employeeIdKey.equals(targetEmployeeId)) {
             return false;
         }
@@ -557,11 +521,10 @@ public class LeaveApplicationController {
 
     private Set<String> buildManagerKeys(UserAccount manager) {
         return Stream.of(
-                        manager.getEmployeeId(),
-                        manager.getUsername(),
-                        manager.getEmailId(),
-                        buildDisplayName(manager)
-                )
+                manager.getEmployeeId(),
+                manager.getUsername(),
+                manager.getEmailId(),
+                buildDisplayName(manager))
                 .map(this::normalizeKey)
                 .filter(value -> !value.isBlank())
                 .collect(Collectors.toSet());
@@ -735,39 +698,17 @@ public class LeaveApplicationController {
         return values;
     }
 
-    private Optional<String> validateLeaveBalanceFor(UserAccount employee, String normalizedLeaveType, Integer duration) {
-        int requested = duration == null ? 0 : duration;
-        if (requested <= 0) {
-            return Optional.of("Invalid leave duration");
-        }
-
+    private boolean hasValidLeaveTracker(UserAccount employee, String normalizedLeaveType) {
         if (normalizedLeaveType.equals("lop")) {
-            return Optional.empty();
+            return true;
         }
 
         if (!normalizedLeaveType.equals("sick") && !normalizedLeaveType.equals("casual")) {
-            return Optional.of("Leave type must be sick, casual, or lop");
+            return false;
         }
 
         LeaveTrackerData tracker = leaveTrackerService.recalculateLeaveTrackerForEmployee(employee);
-        if (tracker == null) {
-            return Optional.of("Unable to validate leave balance for employee");
-        }
-
-        int available = normalizedLeaveType.equals("sick")
-                ? safeInt(tracker.getSickLeaveAvailable())
-                : safeInt(tracker.getCasualLeaveAvailable());
-
-        if (available <= 0) {
-            return Optional.of("Insufficient " + normalizedLeaveType + " leave balance");
-        }
-
-        if (requested > available) {
-            return Optional.of("Requested " + formatLeaveType(normalizedLeaveType)
-                    + " exceeds available balance (requested: " + requested + ", available: " + available + ")");
-        }
-
-        return Optional.empty();
+        return tracker != null;
     }
 
     private Optional<String> validateLeaveDateWindow(String normalizedLeaveType, String fromDateRaw, String toDateRaw) {
@@ -787,7 +728,8 @@ public class LeaveApplicationController {
                         || toDate.isBefore(earliestAllowed)
                         || fromDate.isAfter(latestAllowed)
                         || toDate.isAfter(latestAllowed)) {
-                    return Optional.of("Sick leave can only be applied for up to 7 days in the past, today, or next day");
+                    return Optional
+                            .of("Sick leave can only be applied for up to 7 days in the past, today, or next day");
                 }
             }
 
@@ -811,5 +753,3 @@ public class LeaveApplicationController {
     private record AttachmentPayload(String contentType, byte[] bytes) {
     }
 }
-
-

@@ -35,6 +35,26 @@ jobs:
         working-directory: ${{ env.APP_DIR }}
         run: mvn -B clean test package
 
+      - name: Validate runtime configuration
+        env:
+          DB_URL: ${{ secrets.DB_URL }}
+          DB_USERNAME: ${{ secrets.DB_USERNAME }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+        run: |
+          missing=0
+          for key in DB_URL DB_USERNAME DB_PASSWORD JWT_SECRET; do
+            if [ -z "${!key}" ]; then
+              echo "Missing required GitHub secret: $key"
+              missing=1
+            fi
+          done
+
+          if [ "$missing" -ne 0 ]; then
+            echo "Cloud Run deployment requires runtime app secrets in GitHub Actions."
+            exit 1
+          fi
+
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
@@ -63,9 +83,18 @@ jobs:
         env:
           REGION: ${{ secrets.GCP_REGION }}
           SERVICE: ${{ secrets.GCP_CLOUD_RUN_SERVICE }}
+          DB_URL: ${{ secrets.DB_URL }}
+          DB_USERNAME: ${{ secrets.DB_USERNAME }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
         run: |
           gcloud run deploy "$SERVICE" \
             --image "$IMAGE" \
             --region "$REGION" \
             --platform managed \
+            --set-env-vars "PORT=8080" \
+            --set-env-vars "DB_URL=$DB_URL" \
+            --set-env-vars "DB_USERNAME=$DB_USERNAME" \
+            --set-env-vars "DB_PASSWORD=$DB_PASSWORD" \
+            --set-env-vars "JWT_SECRET=$JWT_SECRET" \
             --allow-unauthenticated
