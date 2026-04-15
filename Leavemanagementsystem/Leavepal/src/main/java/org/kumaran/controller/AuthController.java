@@ -619,14 +619,14 @@ public class AuthController {
     })
     public ResponseEntity<String> deleteUser(
             @Parameter(description = "Username of the employee account", required = true, example = "john.doe@company.com") @PathVariable String username,
-                   // Decode URL-encoded username (e.g., john%40example.com -> john@example.com)
-                   try {
-                       username = URLDecoder.decode(username, StandardCharsets.UTF_8);
-                   } catch (Exception e) {
-                       return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Invalid username encoding");
-                   }
-
             HttpServletRequest request) {
+        // Decode URL-encoded username (e.g., john%40example.com -> john@example.com)
+        try {
+            username = URLDecoder.decode(username, StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Invalid username encoding");
+        }
+
         if (!jwtHelper.isAdmin(request)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Only admin users can delete workforce accounts");
         }
