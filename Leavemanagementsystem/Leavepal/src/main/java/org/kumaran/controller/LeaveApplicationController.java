@@ -207,7 +207,7 @@ public class LeaveApplicationController {
         lopEntity.setLeaveType("lop");
         lopEntity.setFromDate(fromDateStr);
         lopEntity.setToDate(toDateStr);
-        lopEntity.setDuration(lopDays);
+        lopEntity.setDuration((int) lopDays);
         lopEntity.setReason(reason);
         lopEntity.setStatus("PENDING");
         lopEntity.setAppliedDate(LocalDate.now().toString());
