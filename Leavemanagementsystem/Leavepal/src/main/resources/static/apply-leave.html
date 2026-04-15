@@ -432,9 +432,20 @@
             const leaveType = document.getElementById('leaveType').value;
             const fromDate = document.getElementById('fromDate').value;
             const toDate = document.getElementById('toDate').value;
-            const reason = document.getElementById('reason').value;
+            const reason = document.getElementById('reason').value.trim();
             const duration = parseFloat(document.getElementById('durationValue').textContent) || 0;
             const attachmentInput = document.getElementById('sickAttachment');
+
+            // MANDATORY REASON CHECK - ADDED
+            if (!reason) {
+                notify('Reason/Comment is mandatory for leave application.', 'warning');
+                return;
+            }
+
+            if (!leaveType || duration <= 0 || !fromDate || !toDate) {
+                notify('Please select valid leave dates and type before submitting.', 'warning');
+                return;
+            }
 
             // Use manager context already loaded on page init — no extra network call
             const managerContext = getManagerContext(currentUser);
@@ -444,11 +455,6 @@
                 && !managerContext.username
                 && !managerContext.email) {
                 notify('Your reporting manager is not mapped. Please contact admin to link your manager before applying leave.', 'warning');
-                return;
-            }
-
-            if (!leaveType || duration <= 0 || !fromDate || !toDate) {
-                notify('Please select valid leave dates and type before submitting.', 'warning');
                 return;
             }
 

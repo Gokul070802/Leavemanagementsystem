@@ -1,5 +1,7 @@
 package org.kumaran.dto;
 
+import jakarta.validation.constraints.NotBlank;
+
 public class LeaveApplicationRequest {
     private String reportingManagerId;
     private String reportingManagerUsername;
@@ -10,6 +12,8 @@ public class LeaveApplicationRequest {
     private String toDate;
     private String dayType;
     private Double duration;
+
+    @NotBlank(message = "Reason/Comment is mandatory for leave application")
     private String reason;
     private String sickAttachmentName;
     private String sickAttachmentData;
