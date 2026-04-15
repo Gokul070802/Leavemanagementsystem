@@ -123,7 +123,7 @@
                         </div>
                         <div class="form-group">
                             <label for="nationalityInput">Nationality</label>
-                            <input type="text" id="nationalityInput" placeholder="e.g. Indian (8–16 letters)" maxlength="16" autocomplete="off" required>
+                            <input type="text" id="nationalityInput" placeholder="e.g. Indian" maxlength="16" autocomplete="off">
                             <div class="field-error" id="nationalityError"></div>
                         </div>
                         <div class="form-group">
@@ -155,7 +155,8 @@
                         </div>
                         <div class="form-group">
                             <label for="personalEmailInput">Personal Email</label>
-                            <input type="email" id="personalEmailInput" required oninput="this.value=this.value.toLowerCase()">
+                            <input type="email" id="personalEmailInput" required pattern="^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$" oninput="this.value=this.value.toLowerCase()">
+                            <div class="field-error" id="personalEmailError"></div>
                         </div>
                         <div class="form-group">
                             <label for="genderInput">Gender</label>
@@ -349,12 +350,26 @@
                     return;
                 }
                 const natVal = document.getElementById('nationalityInput').value.trim();
-                if (!/^[a-zA-Z]{8,16}$/.test(natVal)) {
-                    document.getElementById('nationalityError').textContent = 'Nationality must be 8–16 letters only.';
+                if (natVal && !/^[a-zA-Z\s]{1,16}$/.test(natVal)) {
+                    document.getElementById('nationalityError').textContent = 'Nationality must contain letters and spaces only (max 16).';
                     document.getElementById('nationalityError').classList.add('visible');
                     notify('Please fix the highlighted errors.', 'warning');
                     return;
                 }
+                document.getElementById('nationalityError').textContent = '';
+                document.getElementById('nationalityError').classList.remove('visible');
+
+                const personalEmailVal = document.getElementById('personalEmailInput').value.toLowerCase().trim();
+                const personalEmailPattern = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+                if (!personalEmailPattern.test(personalEmailVal)) {
+                    document.getElementById('personalEmailError').textContent = 'Enter a valid personal email address.';
+                    document.getElementById('personalEmailError').classList.add('visible');
+                    notify('Please fix the highlighted errors.', 'warning');
+                    return;
+                }
+                document.getElementById('personalEmailError').textContent = '';
+                document.getElementById('personalEmailError').classList.remove('visible');
+
                 if (!validateDOBAge()) {
                     notify('Please fix the date of birth.', 'warning');
                     return;
@@ -487,14 +502,32 @@
             const natError = document.getElementById('nationalityError');
             if (natInput) {
                 natInput.addEventListener('input', function () {
-                    this.value = this.value.replace(/[^a-zA-Z]/g, '').slice(0, 16);
-                    if (this.value.length === 0 || (this.value.length >= 8 && /^[a-zA-Z]+$/.test(this.value))) {
+                    this.value = this.value.replace(/[^a-zA-Z\s]/g, '').slice(0, 16);
+                    if (!this.value || /^[a-zA-Z\s]{1,16}$/.test(this.value)) {
                         if (natError) { natError.textContent = ''; natError.classList.remove('visible'); }
                     }
                 });
                 natInput.addEventListener('blur', function () {
-                    if (this.value && !/^[a-zA-Z]{8,16}$/.test(this.value)) {
-                        if (natError) { natError.textContent = 'Nationality must be 8–16 letters only.'; natError.classList.add('visible'); }
+                    if (this.value && !/^[a-zA-Z\s]{1,16}$/.test(this.value)) {
+                        if (natError) { natError.textContent = 'Nationality must contain letters and spaces only (max 16).'; natError.classList.add('visible'); }
+                    }
+                });
+            }
+
+            // Personal email: strict valid format
+            const personalEmailInput = document.getElementById('personalEmailInput');
+            const personalEmailError = document.getElementById('personalEmailError');
+            if (personalEmailInput) {
+                const personalEmailPattern = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+                personalEmailInput.addEventListener('input', function () {
+                    this.value = this.value.toLowerCase();
+                    if (!this.value || personalEmailPattern.test(this.value.trim())) {
+                        if (personalEmailError) { personalEmailError.textContent = ''; personalEmailError.classList.remove('visible'); }
+                    }
+                });
+                personalEmailInput.addEventListener('blur', function () {
+                    if (this.value && !personalEmailPattern.test(this.value.trim())) {
+                        if (personalEmailError) { personalEmailError.textContent = 'Enter a valid personal email address.'; personalEmailError.classList.add('visible'); }
                     }
                 });
             }

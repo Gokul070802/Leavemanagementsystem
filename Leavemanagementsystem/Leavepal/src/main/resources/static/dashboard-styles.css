@@ -1269,12 +1269,18 @@ html[data-user-role="admin"] #managerLeaveRequestsNav { display: none !important
     color: #111827;
 }
 
+.manager-empty-state-cell {
+    text-align: center;
+    color: #666;
+}
+
 @media (max-width: 1100px) {
     .admin-metrics-grid,
     .admin-lower-grid,
     .table-card-header {
         grid-template-columns: 1fr;
     }
+
     .admin-lower-grid {
         grid-template-columns: 1fr;
     }
@@ -2429,6 +2435,7 @@ html[data-user-role="admin"] #managerLeaveRequestsNav { display: none !important
     padding: 10px 6px 10px 0;
     white-space: nowrap;
     color: inherit;
+    -webkit-user-select: none;
     user-select: none;
 }
 .phone-prefix-wrap input {
@@ -2463,3 +2470,70 @@ html[data-user-role="admin"] #managerLeaveRequestsNav { display: none !important
     color: inherit;
 }
 .toggle-password-btn:hover { opacity: 1; }
+
+/* ─── Leave split confirmation modal (apply-leave) ───────────────────────── */
+.leave-split-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1300;
+    background: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+.leave-split-modal.hidden {
+    display: none;
+}
+.leave-split-card {
+    width: min(560px, 96vw);
+    max-height: 78vh;
+    overflow-y: auto;
+    background: #0f1a20;
+    color: #f5f7fa;
+    border-radius: 16px;
+    border: 1px solid rgba(99, 179, 237, 0.35);
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+    padding: 24px;
+}
+.leave-split-card h3 {
+    margin: 0 0 14px 0;
+    font-size: 22px;
+    font-weight: 700;
+    color: #9ae6ff;
+}
+.leave-split-body p {
+    margin: 8px 0;
+    line-height: 1.45;
+}
+.leave-split-body ul {
+    margin: 8px 0 10px 20px;
+    padding: 0;
+}
+.leave-split-body li {
+    margin: 4px 0;
+}
+.leave-split-actions {
+    margin-top: 18px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+}
+.leave-split-actions .primary-btn,
+.leave-split-actions .secondary-btn {
+    min-width: 110px;
+    border-radius: 999px;
+    padding: 10px 16px;
+    font-weight: 600;
+}
+
+@media (max-width: 600px) {
+    .leave-split-actions {
+        flex-direction: column;
+    }
+
+    .leave-split-actions .primary-btn,
+    .leave-split-actions .secondary-btn {
+        width: 100%;
+    }
+}

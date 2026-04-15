@@ -96,7 +96,7 @@
                         </select>
                     </div>
                     <div class="manager-table-card">
-                        <h3 class="manager-table-title">Recent Leave Requests</h3>
+                        <h3 class="manager-table-title">Leave Requests</h3>
                         <table class="employee-table">
                             <thead>
                                 <tr>
@@ -113,7 +113,7 @@
                                 </tr>
                             </thead>
                             <tbody id="managerRequestsTableBody">
-                                <tr><td colspan="10" style="text-align:center; color:#666;">No subordinate leave requests found.</td></tr>
+                                <tr><td colspan="10" class="manager-empty-state-cell">No subordinate leave requests found.</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -155,7 +155,6 @@
     <script src="api-config.js"></script>
     <script src="selenium-hooks.js"></script>
     <script>
-        let currentSessionUser = null;
         let managerSubordinates = [];
         let managerRequests = [];
         let activeRequestId = null;
@@ -180,7 +179,6 @@
                 return;
             }
 
-            currentSessionUser = currentUser;
             const fullName = `${currentUser.firstName || ''} ${currentUser.lastName || ''}`.trim() || currentUser.username || 'Manager';
             document.getElementById('managerTopName').textContent = fullName;
 
@@ -391,11 +389,10 @@
             }
 
             const visibleRequests = [...requests]
-                .sort((a, b) => (b.appliedDate || '').localeCompare(a.appliedDate || ''))
-                .slice(0, 3);
+                .sort((a, b) => (b.appliedDate || '').localeCompare(a.appliedDate || ''));
 
             if (!visibleRequests.length) {
-                tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color:#666;">No subordinate leave requests found.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="10" class="manager-empty-state-cell">No subordinate leave requests found.</td></tr>';
                 return;
             }
 
@@ -590,20 +587,6 @@
                     window.showTopRightNotification(error.message || 'Unable to download attachment.', 'error');
                 }
             }
-        }
-
-        function getUserIdentifiers(user) {
-            if (!user) {
-                return [];
-            }
-            return Array.from(new Set([
-                user.employeeId,
-                user.username,
-                user.emailId,
-                user.email,
-                user.reportingEmployeeId,
-                user.reporting
-            ].filter(Boolean)));
         }
 
         function normalizeKey(value) {

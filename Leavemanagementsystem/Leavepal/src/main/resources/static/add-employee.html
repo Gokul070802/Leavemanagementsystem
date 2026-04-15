@@ -107,12 +107,12 @@
                         </div>
                         <div class="form-group">
                             <label>FIRST NAME</label>
-                            <input type="text" id="firstName" placeholder="Enter first name (8–20 letters)" required autocomplete="off">
+                            <input type="text" id="firstName" placeholder="Enter first name" required autocomplete="off">
                             <div class="field-error" id="firstNameError"></div>
                         </div>
                         <div class="form-group">
                             <label>LAST NAME</label>
-                            <input type="text" id="lastName" placeholder="Enter last name (8–20 letters)" required autocomplete="off">
+                            <input type="text" id="lastName" placeholder="Enter last name" required autocomplete="off">
                             <div class="field-error" id="lastNameError"></div>
                         </div>
                         <div class="form-group">
@@ -126,7 +126,7 @@
                         </div>
                         <div class="form-group">
                             <label>DESIGNATION</label>
-                            <input type="text" id="designation" placeholder="Enter designation (8–16 letters)" autocomplete="off">
+                            <input type="text" id="designation" placeholder="Enter designation" autocomplete="off" required>
                             <div class="field-error" id="designationError"></div>
                         </div>
                         <div class="form-group">
@@ -138,7 +138,7 @@
                         </div>
                         <div class="form-group">
                             <label>LOCATION</label>
-                            <input type="text" id="location" placeholder="Enter location (8–16 letters)" autocomplete="off">
+                            <input type="text" id="location" placeholder="Enter location" autocomplete="off" required>
                             <div class="field-error" id="locationError"></div>
                         </div>
                         <div class="form-group">
@@ -338,10 +338,10 @@
             // ── Front-end validation ──────────────────────────────────────────────
             const emailOk    = validateEmail();
             const passwordOk = validatePassword();
-            const firstOk    = validateAlphaField('firstName',   'firstNameError',   8, 20, 'First name');
-            const lastOk     = validateAlphaField('lastName',    'lastNameError',    8, 20, 'Last name');
-            const desigOk    = validateAlphaField('designation', 'designationError', 8, 16, 'Designation');
-            const locOk      = validateAlphaField('location',    'locationError',    8, 16, 'Location');
+            const firstOk    = validateAlphaField('firstName',   'firstNameError',   0, 20, 'First name', true);
+            const lastOk     = validateAlphaField('lastName',    'lastNameError',    0, 20, 'Last name', true);
+            const desigOk    = validateAlphaField('designation', 'designationError', 0, 16, 'Designation', true);
+            const locOk      = validateAlphaField('location',    'locationError',    0, 16, 'Location', true);
             if (!emailOk || !passwordOk || !firstOk || !lastOk || !desigOk || !locOk) {
                 notify('Please fix the highlighted errors before saving.', 'warning');
                 return;
@@ -439,28 +439,38 @@
             el.classList.remove('visible');
         }
 
-        function setupAlphaOnlyField(inputId, errorId, min, max, label) {
+        function setupAlphaOnlyField(inputId, errorId, min, max, label, allowSpaces) {
             const input = document.getElementById(inputId);
             if (!input) return;
             input.addEventListener('input', function () {
-                // Strip non-alpha characters in real time
-                const cleaned = this.value.replace(/[^a-zA-Z]/g, '');
+                // Strip non-letter chars and optionally allow spaces in real time.
+                const cleaned = allowSpaces
+                    ? this.value.replace(/[^a-zA-Z\s]/g, '')
+                    : this.value.replace(/[^a-zA-Z]/g, '');
                 if (cleaned !== this.value) this.value = cleaned;
-                validateAlphaField(inputId, errorId, min, max, label);
+                validateAlphaField(inputId, errorId, min, max, label, allowSpaces);
             });
             input.addEventListener('blur', function () {
-                validateAlphaField(inputId, errorId, min, max, label);
+                validateAlphaField(inputId, errorId, min, max, label, allowSpaces);
             });
         }
 
-        function validateAlphaField(inputId, errorId, min, max, label) {
-            const val = document.getElementById(inputId).value;
-            if (!val) { clearFieldError(errorId); return false; }
-            if (!/^[a-zA-Z]+$/.test(val)) {
-                showFieldError(errorId, `${label} must contain letters only.`);
+        function validateAlphaField(inputId, errorId, min, max, label, allowSpaces) {
+            const rawVal = document.getElementById(inputId).value;
+            const val = rawVal.trim();
+            if (!val) {
+                showFieldError(errorId, `${label} is required.`);
                 return false;
             }
-            if (val.length < min) {
+
+            const alphaPattern = allowSpaces ? /^[a-zA-Z\s]+$/ : /^[a-zA-Z]+$/;
+            if (!alphaPattern.test(rawVal) || !/[a-zA-Z]/.test(rawVal)) {
+                showFieldError(errorId, allowSpaces
+                    ? `${label} must contain letters and spaces only.`
+                    : `${label} must contain letters only.`);
+                return false;
+            }
+            if (min > 0 && val.length < min) {
                 showFieldError(errorId, `${label} must be at least ${min} characters.`);
                 return false;
             }
@@ -562,10 +572,10 @@
         document.addEventListener('DOMContentLoaded', function () {
             setupEmailValidation();
             setupPasswordStrength();
-            setupAlphaOnlyField('firstName',   'firstNameError',   8, 20, 'First name');
-            setupAlphaOnlyField('lastName',    'lastNameError',    8, 20, 'Last name');
-            setupAlphaOnlyField('designation', 'designationError', 8, 16, 'Designation');
-            setupAlphaOnlyField('location',    'locationError',    8, 16, 'Location');
+            setupAlphaOnlyField('firstName',   'firstNameError',   0, 20, 'First name', true);
+            setupAlphaOnlyField('lastName',    'lastNameError',    0, 20, 'Last name', true);
+            setupAlphaOnlyField('designation', 'designationError', 0, 16, 'Designation', true);
+            setupAlphaOnlyField('location',    'locationError',    0, 16, 'Location', true);
         });
     </script>
 </body>

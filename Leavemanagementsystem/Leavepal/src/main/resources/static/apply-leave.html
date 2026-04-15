@@ -178,6 +178,17 @@
         </main>
     </div>
 
+    <div id="leaveSplitModal" class="leave-split-modal hidden" aria-hidden="true">
+        <div class="leave-split-card" role="dialog" aria-modal="true" aria-labelledby="leaveSplitModalTitle">
+            <h3 id="leaveSplitModalTitle">Leave Balance Check</h3>
+            <div id="leaveSplitModalBody" class="leave-split-body"></div>
+            <div class="leave-split-actions">
+                <button type="button" id="leaveSplitOkBtn" class="primary-btn">OK</button>
+                <button type="button" id="leaveSplitCancelBtn" class="secondary-btn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <script src="ui-notifications.js"></script>
     <script src="env.js"></script>
     <script src="api-config.js"></script>
@@ -463,6 +474,52 @@
             window.location.href = 'leave-tracker.html';
         }
 
+        function showLeaveSplitModal(details) {
+            const modal = document.getElementById('leaveSplitModal');
+            const body = document.getElementById('leaveSplitModalBody');
+            const okBtn = document.getElementById('leaveSplitOkBtn');
+            const cancelBtn = document.getElementById('leaveSplitCancelBtn');
+
+            if (!modal || !body || !okBtn || !cancelBtn) {
+                return Promise.resolve(window.confirm(details.fallbackText || 'Do you want to proceed?'));
+            }
+
+            body.innerHTML = details.html;
+            modal.classList.remove('hidden');
+            modal.setAttribute('aria-hidden', 'false');
+
+            return new Promise((resolve) => {
+                const cleanup = () => {
+                    modal.classList.add('hidden');
+                    modal.setAttribute('aria-hidden', 'true');
+                    okBtn.removeEventListener('click', onOk);
+                    cancelBtn.removeEventListener('click', onCancel);
+                    modal.removeEventListener('click', onBackdrop);
+                    document.removeEventListener('keydown', onEsc);
+                };
+
+                const onOk = () => { cleanup(); resolve(true); };
+                const onCancel = () => { cleanup(); resolve(false); };
+                const onBackdrop = (event) => {
+                    if (event.target === modal) {
+                        cleanup();
+                        resolve(false);
+                    }
+                };
+                const onEsc = (event) => {
+                    if (event.key === 'Escape') {
+                        cleanup();
+                        resolve(false);
+                    }
+                };
+
+                okBtn.addEventListener('click', onOk);
+                cancelBtn.addEventListener('click', onCancel);
+                modal.addEventListener('click', onBackdrop);
+                document.addEventListener('keydown', onEsc);
+            });
+        }
+
         async function applyLeaveForCurrentUser(currentUser) {
             const leaveType = document.getElementById('leaveType').value;
             const fromDate = document.getElementById('fromDate').value;
@@ -514,16 +571,25 @@
                     const excess = duration - available;
                     const leaveLabel = leaveType === 'sick' ? 'Sick' : 'Casual';
 
-                    const confirmed = window.confirm(
-                        `Insufficient ${leaveLabel} leave balance.\n\n` +
-                        `Available: ${available} day(s)\n` +
-                        `Requested: ${duration} day(s)\n\n` +
-                        `This will be submitted as:\n` +
-                        (available > 0 ? `• ${available} day(s) as ${leaveLabel} Leave\n` : '') +
-                        `• ${excess} day(s) as Loss of Pay (LOP)\n\n` +
-                        `Both requests will require manager approval separately.\n\n` +
-                        `Do you want to proceed?`
-                    );
+                    const modalHtml =
+                        `<p><strong>Insufficient ${leaveLabel} leave balance.</strong></p>` +
+                        `<p>Available: <strong>${available}</strong> day(s)</p>` +
+                        `<p>Requested: <strong>${duration}</strong> day(s)</p>` +
+                        `<p>This will be submitted as:</p>` +
+                        `<ul>` +
+                        (available > 0 ? `<li>${available} day(s) as ${leaveLabel} Leave</li>` : '') +
+                        `<li>${excess} day(s) as Loss of Pay (LOP)</li>` +
+                        `</ul>` +
+                        `<p>Both requests will require manager approval separately.</p>`;
+
+                    const confirmed = await showLeaveSplitModal({
+                        html: modalHtml,
+                        fallbackText:
+                            `Insufficient ${leaveLabel} leave balance.\n\n` +
+                            `Available: ${available} day(s)\n` +
+                            `Requested: ${duration} day(s)\n\n` +
+                            `Do you want to proceed?`
+                    });
                     if (!confirmed) {
                         return;
                     }
