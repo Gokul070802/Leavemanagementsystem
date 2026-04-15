@@ -6,6 +6,7 @@
     <title>Apply Leave - LeavePal</title>
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="stylesheet" href="dashboard-styles.css">
+    <script src="auth-guard.js"></script>
 </head>
 <body>
     <div class="dashboard-container">
@@ -470,7 +471,7 @@
             const duration = parseFloat(document.getElementById('durationValue').textContent) || 0;
             const attachmentInput = document.getElementById('sickAttachment');
 
-            // MANDATORY REASON CHECK - ADDED
+            // MANDATORY REASON CHECK
             if (!reason) {
                 notify('Reason/Comment is mandatory for leave application.', 'warning');
                 return;
@@ -481,7 +482,7 @@
                 return;
             }
 
-            // Use manager context already loaded on page init — no extra network call
+            // Use manager context already loaded on page init
             const managerContext = getManagerContext(currentUser);
 
             if ((currentUser.role || '').toLowerCase() === 'employee'
@@ -497,9 +498,54 @@
             const managerEmail = managerContext.email;
             const managerName = managerContext.name;
 
+            // ── LOP Split Calculation ──────────────────────────────────────────────
+            // Pre-check available balance to split the request BEFORE submitting.
+            let primaryDuration = duration;
+            let primaryToDate = toDate;
+            let lopDuration = 0;
+            let lopFromDate = null;
+
+            if (leaveType === 'sick' || leaveType === 'casual') {
+                const available = leaveType === 'sick'
+                    ? (window._availableSickLeave !== undefined ? window._availableSickLeave : Infinity)
+                    : (window._availableCasualLeave !== undefined ? window._availableCasualLeave : Infinity);
+
+                if (isFinite(available) && duration > available) {
+                    const excess = duration - available;
+                    const leaveLabel = leaveType === 'sick' ? 'Sick' : 'Casual';
+
+                    const confirmed = window.confirm(
+                        `Insufficient ${leaveLabel} leave balance.\n\n` +
+                        `Available: ${available} day(s)\n` +
+                        `Requested: ${duration} day(s)\n\n` +
+                        `This will be submitted as:\n` +
+                        (available > 0 ? `• ${available} day(s) as ${leaveLabel} Leave\n` : '') +
+                        `• ${excess} day(s) as Loss of Pay (LOP)\n\n` +
+                        `Both requests will require manager approval separately.\n\n` +
+                        `Do you want to proceed?`
+                    );
+                    if (!confirmed) {
+                        return;
+                    }
+
+                    if (available > 0) {
+                        primaryDuration = available;
+                        primaryToDate = addCalendarDays(fromDate, available - 1);
+                        lopDuration = excess;
+                        lopFromDate = addCalendarDays(fromDate, available);
+                    } else {
+                        // All days become LOP
+                        primaryDuration = 0;
+                        lopDuration = duration;
+                        lopFromDate = fromDate;
+                    }
+                }
+            }
+
+            // ── Attachment handling ────────────────────────────────────────────────
             let sickAttachmentName = '';
             let sickAttachmentData = '';
-            if (leaveType === 'sick' && duration >= 3) {
+            if (leaveType === 'sick' && primaryDuration >= 3) {
                 const file = attachmentInput.files && attachmentInput.files[0];
                 if (!file) {
                     notify('Medical attachment is mandatory for sick leave of 3 or more days.', 'warning');
@@ -528,46 +574,83 @@
             const applyBtn = document.querySelector('.apply-btn');
             if (applyBtn) {
                 applyBtn.disabled = true;
-                applyBtn.textContent = 'Applying...';
+                applyBtn.textContent = lopDuration > 0 ? 'Submitting...' : 'Applying...';
             }
 
-            const leaveApplication = {
+            const basePayload = {
                 reportingManagerId: managerId,
                 reportingManagerUsername: managerUsername,
                 reportingManagerEmail: managerEmail,
                 reportingManagerName: managerName,
-                leaveType: leaveType,
-                fromDate: fromDate,
-                toDate: toDate,
-                duration: duration,
-                reason: reason,
+                reason,
                 sickAttachmentName,
                 sickAttachmentData
             };
 
-            const response = await fetch('/api/leave-applications', {
-                method: 'POST',
-                headers: getAuthHeaders(),
-                body: JSON.stringify(leaveApplication)
-            });
+            let submitted = 0;
+            let failed = 0;
 
-            if (!response.ok) {
-                const message = await response.text();
-                notify(message || 'Unable to apply leave right now.', 'error');
-                if (applyBtn) {
-                    applyBtn.disabled = false;
-                    applyBtn.textContent = 'Apply';
-                }
+            // ── Submit primary request (if any) ────────────────────────────────────
+            if (primaryDuration > 0) {
+                const primaryPayload = {
+                    ...basePayload,
+                    leaveType: leaveType,
+                    fromDate: fromDate,
+                    toDate: primaryToDate,
+                    duration: primaryDuration
+                };
+                const resp = await fetch('/api/leave-applications', {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify(primaryPayload)
+                });
+                if (resp.ok) { submitted++; } else { failed++; const msg = await resp.text(); console.error('Primary request failed:', msg); }
+            }
+
+            // ── Submit LOP request (if needed) ─────────────────────────────────────
+            if (lopDuration > 0) {
+                const lopPayload = {
+                    ...basePayload,
+                    leaveType: 'lop',
+                    fromDate: lopFromDate,
+                    toDate: toDate,
+                    duration: lopDuration,
+                    sickAttachmentName: '',
+                    sickAttachmentData: ''
+                };
+                const resp2 = await fetch('/api/leave-applications', {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify(lopPayload)
+                });
+                if (resp2.ok) { submitted++; } else { failed++; const msg2 = await resp2.text(); console.error('LOP request failed:', msg2); }
+            }
+
+            if (failed > 0 && submitted === 0) {
+                notify('Unable to apply leave right now. Please try again.', 'error');
+                if (applyBtn) { applyBtn.disabled = false; applyBtn.textContent = 'Apply'; }
                 return;
             }
 
-            // Show success immediately — don't block on sidebar refresh
-            notify(`Leave applied successfully! Sent to your manager for review.`, 'success');
-            // Refresh sidebar balances in background
+            if (lopDuration > 0) {
+                notify(`Leave submitted as ${primaryDuration > 0 ? primaryDuration + ' day(s) ' + (leaveType === 'sick' ? 'Sick' : 'Casual') + ' + ' : ''}${lopDuration} day(s) Loss of Pay. Both sent to your manager for approval.`, 'success');
+            } else {
+                notify('Leave applied successfully! Sent to your manager for review.', 'success');
+            }
+
             updateLeaveSidebar(currentUser);
             setTimeout(() => {
                 window.location.href = 'leave-tracker.html';
-            }, 1000);
+            }, 1200);
+        }
+
+        function addCalendarDays(dateStr, days) {
+            const d = new Date(dateStr + 'T00:00:00');
+            d.setDate(d.getDate() + days);
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
         }
 
         async function updateLeaveSidebar(user) {
@@ -590,31 +673,6 @@
                 document.getElementById('sidebarCasualCount').textContent = `${String(casualAvailable).padStart(2, '0')} Left`;
             } catch (error) {
                 console.error('Unable to load leave balances:', error);
-            }
-
-            // Auto-LOP check: warn if requested duration exceeds available balance
-            if (leaveType === 'sick' || leaveType === 'casual') {
-                const available = leaveType === 'sick'
-                    ? (window._availableSickLeave !== undefined ? window._availableSickLeave : Infinity)
-                    : (window._availableCasualLeave !== undefined ? window._availableCasualLeave : Infinity);
-                if (duration > available) {
-                    const excess = duration - available;
-                    const leaveLabel = leaveType === 'sick' ? 'Sick' : 'Casual';
-                    const confirmed = window.confirm(
-                        `Insufficient ${leaveLabel} leave balance.\n\n` +
-                        `Available: ${available} day(s)\n` +
-                        `Requested: ${duration} day(s)\n` +
-                        `Excess ${excess} day(s) will be treated as Leave Without Pay (LOP).\n\n` +
-                        `Do you want to proceed?`
-                    );
-                    if (!confirmed) {
-                        if (applyBtn) {
-                            applyBtn.disabled = false;
-                            applyBtn.textContent = 'Apply';
-                        }
-                        return;
-                    }
-                }
             }
         }
 

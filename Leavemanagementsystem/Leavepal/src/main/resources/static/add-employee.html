@@ -6,6 +6,7 @@
     <title>Add Employee - LeavePal</title>
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="stylesheet" href="dashboard-styles.css">
+    <script src="auth-guard.js"></script>
 </head>
 <body>
     <div class="dashboard-container">
@@ -75,21 +76,44 @@
                             <label>EMPLOYEE ID</label>
                             <input type="text" id="employeeId" placeholder="Generating..." readonly>
                         </div>
-                        <div class="form-group">
+                    <div class="form-group">
                             <label>EMAIL ID</label>
-                            <input type="email" id="emailId" placeholder="official@leavepal.com" pattern="^[a-zA-Z0-9._%+\-]+@leavepal\.com$" title="Email must be in @leavepal.com domain" required>
+                            <input type="email" id="emailId" placeholder="user@leavepal.com" required autocomplete="off">
+                            <div class="field-error" id="emailError"></div>
                         </div>
                         <div class="form-group">
                             <label>PASSWORD</label>
-                            <input type="password" id="password" placeholder="Enter password" minlength="8" maxlength="20" pattern="^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@#$%^&+=])[^\s]+$" title="Password must be 8-20 chars: uppercase, lowercase, number, special char (@#$%^&+=), no spaces" required>
+                            <div class="password-input-wrapper">
+                                <input type="password" id="password" placeholder="Enter password" required autocomplete="new-password">
+                                <button type="button" class="toggle-password-btn" id="toggleEmpPassword" tabindex="-1" title="Show/hide password">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                </button>
+                            </div>
+                            <div class="pwd-strength-wrap">
+                                <div class="pwd-strength-track">
+                                    <div class="pwd-strength-fill" id="pwdStrengthFill"></div>
+                                </div>
+                                <span class="pwd-strength-label" id="pwdStrengthLabel"></span>
+                            </div>
+                            <ul class="pwd-req-list" id="pwdReqList">
+                                <li class="pwd-req" id="req-len">8–16 characters</li>
+                                <li class="pwd-req" id="req-upper">Uppercase letter (A–Z)</li>
+                                <li class="pwd-req" id="req-lower">Lowercase letter (a–z)</li>
+                                <li class="pwd-req" id="req-digit">Number (0–9)</li>
+                                <li class="pwd-req" id="req-spec">Special character (@#$%^&amp;+=!)</li>
+                                <li class="pwd-req" id="req-space">No spaces</li>
+                            </ul>
+                            <div class="field-error" id="passwordError"></div>
                         </div>
                         <div class="form-group">
                             <label>FIRST NAME</label>
-                            <input type="text" id="firstName" placeholder="Enter first name" minlength="8" maxlength="20" pattern="^[a-zA-Z\s]+$" title="First name must be 8-20 alphabetic characters" required>
+                            <input type="text" id="firstName" placeholder="Enter first name (8–20 letters)" required autocomplete="off">
+                            <div class="field-error" id="firstNameError"></div>
                         </div>
                         <div class="form-group">
                             <label>LAST NAME</label>
-                            <input type="text" id="lastName" placeholder="Enter last name" minlength="8" maxlength="20" pattern="^[a-zA-Z\s]+$" title="Last name must be 8-20 alphabetic characters" required>
+                            <input type="text" id="lastName" placeholder="Enter last name (8–20 letters)" required autocomplete="off">
+                            <div class="field-error" id="lastNameError"></div>
                         </div>
                         <div class="form-group">
                             <label>DEPARTMENT</label>
@@ -102,7 +126,8 @@
                         </div>
                         <div class="form-group">
                             <label>DESIGNATION</label>
-                            <input type="text" id="designation" placeholder="e.g. Senior Product Designer" minlength="5" maxlength="20" pattern="^[a-zA-Z\s]+$" title="Designation must be 5-20 alphabetic characters">
+                            <input type="text" id="designation" placeholder="Enter designation (8–16 letters)" autocomplete="off">
+                            <div class="field-error" id="designationError"></div>
                         </div>
                         <div class="form-group">
                             <label>REPORTING MANAGER</label>
@@ -113,7 +138,8 @@
                         </div>
                         <div class="form-group">
                             <label>LOCATION</label>
-                            <input type="text" id="location" placeholder="e.g. London Office" minlength="3" maxlength="20" pattern="^[a-zA-Z\s]+$" title="Location must be 3-20 alphabetic characters">
+                            <input type="text" id="location" placeholder="Enter location (8–16 letters)" autocomplete="off">
+                            <div class="field-error" id="locationError"></div>
                         </div>
                         <div class="form-group">
                             <label>DATE OF JOINING</label>
@@ -309,6 +335,18 @@
         }
 
         function saveEmployee() {
+            // ── Front-end validation ──────────────────────────────────────────────
+            const emailOk    = validateEmail();
+            const passwordOk = validatePassword();
+            const firstOk    = validateAlphaField('firstName',   'firstNameError',   8, 20, 'First name');
+            const lastOk     = validateAlphaField('lastName',    'lastNameError',    8, 20, 'Last name');
+            const desigOk    = validateAlphaField('designation', 'designationError', 8, 16, 'Designation');
+            const locOk      = validateAlphaField('location',    'locationError',    8, 16, 'Location');
+            if (!emailOk || !passwordOk || !firstOk || !lastOk || !desigOk || !locOk) {
+                notify('Please fix the highlighted errors before saving.', 'warning');
+                return;
+            }
+
             const selectedRole = document.getElementById('role').value;
             const reportingManager = document.getElementById('reportingEmployeeId').value;
             const joiningValue = document.getElementById('dateJoining').value;
@@ -350,11 +388,11 @@
             }
 
             const employee = {
-                username: document.getElementById('emailId').value, // Use email as username
+                username: document.getElementById('emailId').value.trim(),
                 password: document.getElementById('password').value,
                 role: selectedRole,
                 employeeId: document.getElementById('employeeId').value,
-                emailId: document.getElementById('emailId').value,
+                emailId: document.getElementById('emailId').value.trim(),
                 firstName: document.getElementById('firstName').value,
                 lastName: document.getElementById('lastName').value,
                 department: document.getElementById('department').value,
@@ -386,6 +424,149 @@
         function cancelAddEmployee() {
             window.location.href = 'employee-details.html';
         }
+
+        // ─── Field validation helpers ────────────────────────────────────────────
+        function showFieldError(errorId, message) {
+            const el = document.getElementById(errorId);
+            if (!el) return;
+            el.textContent = message;
+            el.classList.add('visible');
+        }
+        function clearFieldError(errorId) {
+            const el = document.getElementById(errorId);
+            if (!el) return;
+            el.textContent = '';
+            el.classList.remove('visible');
+        }
+
+        function setupAlphaOnlyField(inputId, errorId, min, max, label) {
+            const input = document.getElementById(inputId);
+            if (!input) return;
+            input.addEventListener('input', function () {
+                // Strip non-alpha characters in real time
+                const cleaned = this.value.replace(/[^a-zA-Z]/g, '');
+                if (cleaned !== this.value) this.value = cleaned;
+                validateAlphaField(inputId, errorId, min, max, label);
+            });
+            input.addEventListener('blur', function () {
+                validateAlphaField(inputId, errorId, min, max, label);
+            });
+        }
+
+        function validateAlphaField(inputId, errorId, min, max, label) {
+            const val = document.getElementById(inputId).value;
+            if (!val) { clearFieldError(errorId); return false; }
+            if (!/^[a-zA-Z]+$/.test(val)) {
+                showFieldError(errorId, `${label} must contain letters only.`);
+                return false;
+            }
+            if (val.length < min) {
+                showFieldError(errorId, `${label} must be at least ${min} characters.`);
+                return false;
+            }
+            if (val.length > max) {
+                showFieldError(errorId, `${label} must be at most ${max} characters.`);
+                return false;
+            }
+            clearFieldError(errorId);
+            return true;
+        }
+
+        function setupEmailValidation() {
+            const input = document.getElementById('emailId');
+            if (!input) return;
+            const re = /^[a-zA-Z0-9._%+\-]+@leavepal\.com$/;
+            input.addEventListener('input', function () {
+                if (!this.value || re.test(this.value)) clearFieldError('emailError');
+                else showFieldError('emailError', 'Email must be in format user@leavepal.com');
+            });
+            input.addEventListener('blur', function () {
+                if (this.value && !re.test(this.value)) showFieldError('emailError', 'Email must be in format user@leavepal.com');
+                else clearFieldError('emailError');
+            });
+        }
+
+        function validateEmail() {
+            const val = document.getElementById('emailId').value.trim();
+            const re = /^[a-zA-Z0-9._%+\-]+@leavepal\.com$/;
+            if (!val) { showFieldError('emailError', 'Email is required.'); return false; }
+            if (!re.test(val)) { showFieldError('emailError', 'Email must be in format user@leavepal.com'); return false; }
+            clearFieldError('emailError');
+            return true;
+        }
+
+        // ─── Password strength ───────────────────────────────────────────────────
+        const PWD_RULES = [
+            { id: 'req-len',   test: v => v.length >= 8 && v.length <= 16,    label: '8–16 characters' },
+            { id: 'req-upper', test: v => /[A-Z]/.test(v),                    label: 'Uppercase letter' },
+            { id: 'req-lower', test: v => /[a-z]/.test(v),                    label: 'Lowercase letter' },
+            { id: 'req-digit', test: v => /[0-9]/.test(v),                    label: 'Number' },
+            { id: 'req-spec',  test: v => /[@#$%^&+=!]/.test(v),              label: 'Special character' },
+            { id: 'req-space', test: v => !/\s/.test(v) && v.length > 0,      label: 'No spaces' },
+        ];
+        const STRENGTH_LEVELS = [
+            { label: '', color: '#3a3a3a', pct: 0 },
+            { label: 'Very Weak', color: '#e53e3e', pct: 17 },
+            { label: 'Weak',      color: '#e97b2e', pct: 33 },
+            { label: 'Fair',      color: '#d4a017', pct: 50 },
+            { label: 'Good',      color: '#a0c040', pct: 67 },
+            { label: 'Strong',    color: '#38a169', pct: 83 },
+            { label: 'Perfect',   color: '#2f855a', pct: 100 },
+        ];
+
+        function setupPasswordStrength() {
+            const input = document.getElementById('password');
+            if (!input) return;
+            input.addEventListener('input', function () {
+                updatePasswordStrength(this.value);
+                if (!this.value) clearFieldError('passwordError');
+            });
+            input.addEventListener('blur', function () {
+                validatePassword();
+            });
+            // Toggle show/hide
+            const toggleBtn = document.getElementById('toggleEmpPassword');
+            if (toggleBtn) {
+                toggleBtn.addEventListener('click', function () {
+                    input.type = input.type === 'password' ? 'text' : 'password';
+                });
+            }
+        }
+
+        function updatePasswordStrength(val) {
+            const score = PWD_RULES.reduce((acc, rule) => acc + (rule.test(val) ? 1 : 0), 0);
+            PWD_RULES.forEach(rule => {
+                const li = document.getElementById(rule.id);
+                if (li) li.className = 'pwd-req' + (rule.test(val) ? ' met' : '');
+            });
+            const level = val.length === 0 ? STRENGTH_LEVELS[0] : STRENGTH_LEVELS[score];
+            const fill = document.getElementById('pwdStrengthFill');
+            const lbl  = document.getElementById('pwdStrengthLabel');
+            if (fill) { fill.style.width = level.pct + '%'; fill.style.backgroundColor = level.color; }
+            if (lbl)  { lbl.textContent = level.label; lbl.style.color = level.color; }
+        }
+
+        function validatePassword() {
+            const val = document.getElementById('password').value;
+            if (!val) { showFieldError('passwordError', 'Password is required.'); return false; }
+            const failed = PWD_RULES.filter(r => !r.test(val));
+            if (failed.length) {
+                showFieldError('passwordError', 'Password does not meet all requirements above.');
+                return false;
+            }
+            clearFieldError('passwordError');
+            return true;
+        }
+
+        // Initialise all real-time validation after DOM ready
+        document.addEventListener('DOMContentLoaded', function () {
+            setupEmailValidation();
+            setupPasswordStrength();
+            setupAlphaOnlyField('firstName',   'firstNameError',   8, 20, 'First name');
+            setupAlphaOnlyField('lastName',    'lastNameError',    8, 20, 'Last name');
+            setupAlphaOnlyField('designation', 'designationError', 8, 16, 'Designation');
+            setupAlphaOnlyField('location',    'locationError',    8, 16, 'Location');
+        });
     </script>
 </body>
 </html>

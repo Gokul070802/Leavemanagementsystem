@@ -6,6 +6,7 @@
     <title>Leave Requests - LeavePal</title>
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="stylesheet" href="dashboard-styles.css">
+    <script src="auth-guard.js"></script>
 </head>
 <body>
     <div class="dashboard-container">
@@ -124,19 +125,21 @@
     <div id="approveModal" class="manager-request-modal hidden">
         <div class="manager-request-modal-card">
             <div class="manager-request-modal-icon approve">✶</div>
-            <h3>Are you sure you want to approve this leave request?</h3>
+            <h3>Approve Leave Request?</h3>
             <div id="approveDetails" class="manager-request-facts"></div>
-            <label for="approvalComment" class="manager-reason-label">COMMENTS</label>
+            <label for="approvalComment" class="manager-reason-label">COMMENTS (OPTIONAL)</label>
             <textarea id="approvalComment" class="manager-request-reason" placeholder="Optional comment for approval..."></textarea>
-            <button type="button" class="primary-btn" onclick="confirmApprove()">Confirm</button>
-            <button type="button" class="secondary-btn" onclick="closeManagerModals()">Cancel</button>
+            <div class="manager-request-reject-actions">
+                <button type="button" class="secondary-btn" onclick="closeManagerModals()">Cancel</button>
+                <button type="button" class="primary-btn" onclick="confirmApprove()">Approve</button>
+            </div>
         </div>
     </div>
 
     <div id="rejectModal" class="manager-request-modal hidden">
         <div class="manager-request-modal-card reject">
             <div class="manager-request-modal-icon reject">⚠</div>
-            <h3>Are you sure you want to reject this leave request?</h3>
+            <h3>Reject Leave Request?</h3>
             <div id="rejectDetails" class="manager-request-facts"></div>
             <label for="rejectionReason" class="manager-reason-label">REASON FOR REJECTION</label>
             <textarea id="rejectionReason" class="manager-request-reason" placeholder="Enter the reason for rejecting this request..."></textarea>

@@ -6,6 +6,7 @@
     <title>Edit Profile - LeavePal</title>
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="stylesheet" href="dashboard-styles.css">
+    <script src="auth-guard.js"></script>
 </head>
 <body>
     <div class="dashboard-container">
@@ -30,7 +31,7 @@
                         <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
                         <circle cx="12" cy="7" r="4"></circle>
                     </svg>
-                    Employee Details
+                    <span id="employeeNavText">Employee Details</span>
                 </a>
                 <a href="leave-tracker.html" class="nav-item">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -40,6 +41,13 @@
                         <line x1="3" y1="10" x2="21" y2="10"></line>
                     </svg>
                     Leave Tracker
+                </a>
+                <a href="manager-leave-requests.html" id="managerLeaveRequestsNav" class="nav-item" style="display:none;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 11l3 3L22 4"></path>
+                        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                    </svg>
+                    <span id="leaveRequestsNavText">Leave Requests</span>
                 </a>
             </nav>
             <div class="sidebar-footer">
@@ -107,11 +115,16 @@
                         </div>
                         <div class="form-group">
                             <label for="phoneInput">Phone Number</label>
-                            <input type="text" id="phoneInput" placeholder="+91XXXXXXXXXX" pattern="^\+91\d{10}$" title="Phone must be +91 followed by exactly 10 digits" required>
+                            <div class="phone-prefix-wrap">
+                                <span class="phone-prefix">+91</span>
+                                <input type="tel" id="phoneInput" placeholder="10-digit number" maxlength="10" autocomplete="tel-national" required>
+                            </div>
+                            <div class="field-error" id="phoneError"></div>
                         </div>
                         <div class="form-group">
                             <label for="nationalityInput">Nationality</label>
-                            <input type="text" id="nationalityInput" maxlength="15" pattern="^[a-zA-Z\s]+$" title="Nationality must contain only letters, max 15 characters" required>
+                            <input type="text" id="nationalityInput" placeholder="e.g. Indian (8–16 letters)" maxlength="16" autocomplete="off" required>
+                            <div class="field-error" id="nationalityError"></div>
                         </div>
                         <div class="form-group">
                             <label for="bloodGroupInput">Blood Group</label>
@@ -138,6 +151,7 @@
                         <div class="form-group">
                             <label for="dobInput">Date of Birth</label>
                             <input type="date" id="dobInput" required lang="en-GB">
+                            <div class="field-error" id="dobError"></div>
                         </div>
                         <div class="form-group">
                             <label for="personalEmailInput">Personal Email</label>
@@ -154,7 +168,8 @@
                         </div>
                         <div class="form-group">
                             <label for="addressInput">Address</label>
-                            <input type="text" id="addressInput" minlength="10" maxlength="40" title="Address must be between 10-40 characters" required>
+                            <input type="text" id="addressInput" maxlength="255" placeholder="Your address" autocomplete="street-address" required>
+                            <div class="field-error" id="addressError"></div>
                         </div>
                         <div class="form-buttons" style="margin-top: 30px;">
                             <button type="button" class="cancel-btn" onclick="cancelEdit()">Cancel</button>
@@ -223,24 +238,6 @@
         }
 
         function formatDateForApi(value) {
-
-               function validateDOBAge() {
-                   const dobInput = document.getElementById('dobInput');
-                   if (!dobInput || !dobInput.value) {
-                       return;
-                   }
-                   const dob = new Date(dobInput.value);
-                   const today = new Date();
-                   let age = today.getFullYear() - dob.getFullYear();
-                   const monthDiff = today.getMonth() - dob.getMonth();
-                   if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
-                       age--;
-                   }
-                   if (age < 18 || age > 60) {
-                       notify('Age must be between 18 and 60 years.', 'warning');
-                       dobInput.value = '';
-                   }
-               }
             const raw = String(value || '').trim();
             if (!raw) {
                 return '';
@@ -252,6 +249,25 @@
             }
 
             return raw;
+        }
+
+        function validateDOBAge() {
+            const dobInput = document.getElementById('dobInput');
+            const dobError = document.getElementById('dobError');
+            function showDobErr(msg) { if (dobError) { dobError.textContent = msg; dobError.classList.add('visible'); } }
+            function clearDobErr() { if (dobError) { dobError.textContent = ''; dobError.classList.remove('visible'); } }
+            if (!dobInput || !dobInput.value) { clearDobErr(); return true; }
+            const dob = new Date(dobInput.value + 'T00:00:00');
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            if (dob >= today) { showDobErr('Date of birth cannot be today or in the future.'); return false; }
+            let age = today.getFullYear() - dob.getFullYear();
+            const m = today.getMonth() - dob.getMonth();
+            if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
+            if (age < 18) { showDobErr('Employee must be at least 18 years old.'); return false; }
+            if (age > 60) { showDobErr('Employee must be no more than 60 years old.'); return false; }
+            clearDobErr();
+            return true;
         }
 
         function configureEditProfileFormForRole(role) {
@@ -300,7 +316,7 @@
             setFieldValue('reportingEmployeeIdInput', profile.reportingEmployeeId || '');
             setFieldValue('locationInput', profile.location || '');
             setFieldValue('joiningInput', profile.joining || '');
-            setFieldValue('phoneInput', profile.phoneNumber || '');
+            setFieldValue('phoneInput', (profile.phoneNumber || '').replace(/^\+91/, ''));
             setFieldValue('nationalityInput', profile.nationality || '');
             setFieldValue('bloodGroupInput', profile.bloodGroup || '');
             setFieldValue('maritalStatusInput', profile.maritalStatus || '');
@@ -322,8 +338,44 @@
         async function updateProfile(username) {
             const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser')) || {};
             const isAdmin = String(loggedInUser.role || '').toLowerCase() === 'admin';
+
+            // ── Validation (non-admin only; admin fields are removed from DOM) ──
+            if (!isAdmin) {
+                const phoneVal = document.getElementById('phoneInput').value.trim();
+                if (!/^[6-9]\d{9}$/.test(phoneVal)) {
+                    document.getElementById('phoneError').textContent = 'Enter a valid 10-digit Indian mobile number.';
+                    document.getElementById('phoneError').classList.add('visible');
+                    notify('Please fix the highlighted errors.', 'warning');
+                    return;
+                }
+                const natVal = document.getElementById('nationalityInput').value.trim();
+                if (!/^[a-zA-Z]{8,16}$/.test(natVal)) {
+                    document.getElementById('nationalityError').textContent = 'Nationality must be 8–16 letters only.';
+                    document.getElementById('nationalityError').classList.add('visible');
+                    notify('Please fix the highlighted errors.', 'warning');
+                    return;
+                }
+                if (!validateDOBAge()) {
+                    notify('Please fix the date of birth.', 'warning');
+                    return;
+                }
+                const addrVal = document.getElementById('addressInput').value.trim();
+                if (!addrVal) {
+                    document.getElementById('addressError').textContent = 'Address is required.';
+                    document.getElementById('addressError').classList.add('visible');
+                    notify('Please fix the highlighted errors.', 'warning');
+                    return;
+                }
+                if (!/^[a-zA-Z0-9 /().,'-]{1,255}$/.test(addrVal)) {
+                    document.getElementById('addressError').textContent = "Address may only contain letters, numbers, spaces, and / ( ) . , '";
+                    document.getElementById('addressError').classList.add('visible');
+                    notify('Please fix the highlighted errors.', 'warning');
+                    return;
+                }
+            }
+
             const profile = {
-                phoneNumber: document.getElementById('phoneInput').value
+                phoneNumber: '+91' + document.getElementById('phoneInput').value.trim()
             };
 
             if (!isAdmin) {
@@ -388,15 +440,77 @@
             const fullName = `${loggedInUser.firstName || ''} ${loggedInUser.lastName || ''}`.trim() || 'Loading...';
             document.querySelector('.user-name').textContent = fullName;
 
+            // Manager sidebar: show Leave Requests nav
+            if ((loggedInUser.role || '').toLowerCase() === 'manager') {
+                const lrNav = document.getElementById('managerLeaveRequestsNav');
+                const empNavText = document.getElementById('employeeNavText');
+                const lrNavText = document.getElementById('leaveRequestsNavText');
+                if (lrNav) lrNav.style.display = 'flex';
+                if (empNavText) empNavText.textContent = 'Employees';
+                if (lrNavText) lrNavText.textContent = 'Leave Requests';
+            }
+
             configureEditProfileFormForRole(loggedInUser.role);
 
             await loadEditProfile(loggedInUser.username);
 
-           // DOB age validation listener
-           const dobInput = document.getElementById('dobInput');
-           if (dobInput) {
-               dobInput.addEventListener('change', validateDOBAge);
-           }
+            // DOB: set min (today - 60 years) and max (today - 18 years)
+            const dobInput = document.getElementById('dobInput');
+            if (dobInput) {
+                const now = new Date();
+                const maxDob = new Date(now.getFullYear() - 18, now.getMonth(), now.getDate());
+                const minDob = new Date(now.getFullYear() - 60, now.getMonth(), now.getDate());
+                dobInput.max = maxDob.toISOString().split('T')[0];
+                dobInput.min = minDob.toISOString().split('T')[0];
+                dobInput.addEventListener('change', validateDOBAge);
+            }
+
+            // Phone: digits only, real-time
+            const phoneInput = document.getElementById('phoneInput');
+            const phoneError = document.getElementById('phoneError');
+            if (phoneInput) {
+                phoneInput.addEventListener('input', function () {
+                    this.value = this.value.replace(/\D/g, '').slice(0, 10);
+                    if (!this.value || /^[6-9]\d{9}$/.test(this.value)) {
+                        if (phoneError) { phoneError.textContent = ''; phoneError.classList.remove('visible'); }
+                    }
+                });
+                phoneInput.addEventListener('blur', function () {
+                    if (this.value && !/^[6-9]\d{9}$/.test(this.value)) {
+                        if (phoneError) { phoneError.textContent = 'Enter a valid 10-digit Indian mobile number.'; phoneError.classList.add('visible'); }
+                    }
+                });
+            }
+
+            // Nationality: letters only, 8-16
+            const natInput = document.getElementById('nationalityInput');
+            const natError = document.getElementById('nationalityError');
+            if (natInput) {
+                natInput.addEventListener('input', function () {
+                    this.value = this.value.replace(/[^a-zA-Z]/g, '').slice(0, 16);
+                    if (this.value.length === 0 || (this.value.length >= 8 && /^[a-zA-Z]+$/.test(this.value))) {
+                        if (natError) { natError.textContent = ''; natError.classList.remove('visible'); }
+                    }
+                });
+                natInput.addEventListener('blur', function () {
+                    if (this.value && !/^[a-zA-Z]{8,16}$/.test(this.value)) {
+                        if (natError) { natError.textContent = 'Nationality must be 8–16 letters only.'; natError.classList.add('visible'); }
+                    }
+                });
+            }
+
+            // Address: max 255, allowed chars
+            const addrInput = document.getElementById('addressInput');
+            const addrError = document.getElementById('addressError');
+            if (addrInput) {
+                addrInput.addEventListener('input', function () {
+                    if (!this.value || /^[a-zA-Z0-9 /().,'-]{1,255}$/.test(this.value)) {
+                        if (addrError) { addrError.textContent = ''; addrError.classList.remove('visible'); }
+                    } else {
+                        if (addrError) { addrError.textContent = "Address may only contain letters, numbers, spaces, and / ( ) . , '"; addrError.classList.add('visible'); }
+                    }
+                });
+            }
 
             const editProfileForm = document.getElementById('editProfileForm');
             editProfileForm.addEventListener('submit', async function(e) {

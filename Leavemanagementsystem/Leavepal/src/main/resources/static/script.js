@@ -79,8 +79,9 @@ document.addEventListener('DOMContentLoaded', function() {
         localStorage.setItem('loggedInUser', JSON.stringify(user));
         localStorage.setItem('userRole', user.role);
 
+        notify(`Welcome back${user.firstName ? ', ' + user.firstName : ''}! Login successful.`, 'success');
         const redirectUrl = user.redirectUrl || (user.role === 'admin' ? 'admin-dashboard.html' : 'dashboard.html');
-        window.location.href = redirectUrl;
+        setTimeout(() => { window.location.href = redirectUrl; }, 800);
     }
 
     // Form submission

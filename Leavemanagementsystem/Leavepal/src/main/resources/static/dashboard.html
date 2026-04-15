@@ -6,6 +6,7 @@
     <title>Dashboard - LeavePal</title>
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="stylesheet" href="dashboard-styles.css">
+    <script src="auth-guard.js"></script>
 </head>
 <body>
     <div class="dashboard-container">
@@ -187,7 +188,24 @@
                 return;
             }
 
-            // Validate token with server to prevent stale-session / URL-paste attacks
+            // Load dashboard UI immediately from localStorage — no waiting for server
+            currentSessionUser = user;
+            initializeNotificationBell(user);
+            loadEmployeeDashboard(user);
+
+            const employeeNavText = document.getElementById('employeeNavText');
+            const leaveTrackerNavText = document.getElementById('leaveTrackerNavText');
+            const leaveRequestsNavText = document.getElementById('leaveRequestsNavText');
+
+            if (user.role.toLowerCase() === 'manager') {
+                document.getElementById('managerLeaveRequestsNav').style.display = 'flex';
+                document.getElementById('managerLeaveRequestsNav').href = 'manager-leave-requests.html';
+                if (employeeNavText) employeeNavText.textContent = 'Employees';
+                if (leaveTrackerNavText) leaveTrackerNavText.textContent = 'Leave Tracker';
+                if (leaveRequestsNavText) leaveRequestsNavText.textContent = 'Leave Requests';
+            }
+
+            // Validate token with server in the background (after UI is shown)
             if (user.token && user.username) {
                 try {
                     const sessionCheck = await fetch(`/api/users/${encodeURIComponent(user.username)}`, {
@@ -203,22 +221,9 @@
                 }
             }
 
-            currentSessionUser = user;
-            initializeNotificationBell(user);
-            loadEmployeeDashboard(user);
-
-            const employeeNavText = document.getElementById('employeeNavText');
-            const leaveTrackerNavText = document.getElementById('leaveTrackerNavText');
-            const leaveRequestsNavText = document.getElementById('leaveRequestsNavText');
-
             const bootstrapTasks = [renderNotificationBell(user)];
 
             if (user.role.toLowerCase() === 'manager') {
-                document.getElementById('managerLeaveRequestsNav').style.display = 'flex';
-                document.getElementById('managerLeaveRequestsNav').href = 'manager-leave-requests.html';
-                if (employeeNavText) employeeNavText.textContent = 'Employees';
-                if (leaveTrackerNavText) leaveTrackerNavText.textContent = 'Leave Tracker';
-                if (leaveRequestsNavText) leaveRequestsNavText.textContent = 'Leave Requests';
                 bootstrapTasks.push(refreshManagerTeamMembers());
             } else {
                 bootstrapTasks.push(refreshEmployeeTeamMembers(user));
