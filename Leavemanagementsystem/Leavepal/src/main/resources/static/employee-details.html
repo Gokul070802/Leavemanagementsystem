@@ -192,6 +192,10 @@
     <script>
         document.addEventListener('DOMContentLoaded', async function() {
             const user = JSON.parse(localStorage.getItem('loggedInUser')) || { role: 'guest' };
+
+                       // Set user name immediately from localStorage - don't wait for API
+                       const cachedFullName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Loading...';
+                       document.querySelector('.user-name').textContent = cachedFullName;
             if (!user || !user.role || user.role === 'guest') {
                 window.location.href = 'index.html';
                 return;

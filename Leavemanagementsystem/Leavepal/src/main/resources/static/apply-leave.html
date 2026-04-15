@@ -224,6 +224,12 @@
                 });
             }
 
+            // File upload validation on change
+            const sickAttachmentInput = document.getElementById('sickAttachment');
+            if (sickAttachmentInput) {
+                sickAttachmentInput.addEventListener('change', validateSickAttachmentOnChange);
+            }
+
             applyDateConstraintsByLeaveType();
         });
 
@@ -413,6 +419,34 @@
             if (!required) {
                 input.value = '';
             }
+        }
+
+        function validateSickAttachmentOnChange() {
+            const attachmentInput = document.getElementById('sickAttachment');
+            if (!attachmentInput || !attachmentInput.files || !attachmentInput.files[0]) {
+                return; // User cleared selection, that's ok
+            }
+
+            const file = attachmentInput.files[0];
+            
+            // Check file type
+            const isPdf = (file.type && file.type.toLowerCase() === 'application/pdf')
+                || String(file.name || '').toLowerCase().endsWith('.pdf');
+            if (!isPdf) {
+                notify('Only PDF attachment is allowed for sick leave.', 'warning');
+                attachmentInput.value = ''; // Clear invalid selection
+                return;
+            }
+
+            // Check file size
+            if (file.size <= 0 || file.size > 5 * 1024 * 1024) {
+                notify('Attachment size must be between 1 byte and 5 MB.', 'warning');
+                attachmentInput.value = ''; // Clear invalid selection
+                return;
+            }
+
+            // All checks passed, file is valid
+            notify(`File "${file.name}" is valid (${(file.size / 1024).toFixed(2)} KB).`, 'success');
         }
 
         function readFileAsDataUrl(file) {

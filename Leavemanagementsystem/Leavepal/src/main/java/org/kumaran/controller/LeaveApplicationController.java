@@ -163,6 +163,83 @@ public class LeaveApplicationController {
         return ResponseEntity.status(HttpStatus.CREATED).body(saved);
     }
 
+    @PostMapping("/auto-lop")
+    @Operation(summary = "Auto-Create LOP Application", description = "Automatically creates a Loss of Pay (LOP) application for excess leave days when a user applies for more days than their balance.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "201", description = "LOP application created successfully", content = @Content(mediaType = "application/json", schema = @Schema(implementation = LeaveApplication.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid LOP request payload", content = @Content(mediaType = "text/plain")),
+            @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(mediaType = "text/plain"))
+    })
+    public ResponseEntity<?> autoCreateLOP(@RequestBody Map<String, Object> requestBody,
+            HttpServletRequest httpRequest) {
+        Optional<UserAccount> actorOpt = jwtHelper.getActor(httpRequest);
+        if (actorOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Unauthorized");
+        }
+
+        UserAccount actor = actorOpt.get();
+        String fromDateStr = Optional.ofNullable(requestBody.get("fromDate")).map(Object::toString).orElse("");
+        String toDateStr = Optional.ofNullable(requestBody.get("toDate")).map(Object::toString).orElse("");
+        String reason = Optional.ofNullable(requestBody.get("reason")).map(Object::toString)
+                .orElse("Automatic LOP for excess leave days");
+        Object durationObj = requestBody.get("duration");
+        double lopDays = 0;
+        if (durationObj instanceof Number) {
+            lopDays = ((Number) durationObj).doubleValue();
+        } else if (durationObj instanceof String) {
+            try {
+                lopDays = Double.parseDouble((String) durationObj);
+            } catch (NumberFormatException e) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Duration must be a valid number");
+            }
+        }
+
+        if (fromDateStr.isEmpty() || toDateStr.isEmpty() || lopDays <= 0) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("From date, to date, and positive duration are required for LOP");
+        }
+
+        LeaveApplication lopEntity = new LeaveApplication();
+        lopEntity.setEmployeeId(actor.getEmployeeId());
+        lopEntity.setUsername(actor.getUsername());
+        lopEntity.setEmailId(actor.getEmailId());
+        lopEntity.setEmployeeName(buildDisplayName(actor));
+        lopEntity.setLeaveType("lop");
+        lopEntity.setFromDate(fromDateStr);
+        lopEntity.setToDate(toDateStr);
+        lopEntity.setDuration(lopDays);
+        lopEntity.setReason(reason);
+        lopEntity.setStatus("PENDING");
+        lopEntity.setAppliedDate(LocalDate.now().toString());
+        lopEntity.setCreatedAt(System.currentTimeMillis());
+        lopEntity.setUpdatedAt(System.currentTimeMillis());
+
+        Optional<UserAccount> managerOpt = userRepository.findByEmployeeId(
+                Optional.ofNullable(actor.getReportingEmployeeId()).orElse(""));
+        if (managerOpt.isEmpty()) {
+            managerOpt = userRepository.findByUsername(
+                    Optional.ofNullable(actor.getReportingEmployeeId()).orElse(""));
+        }
+
+        managerOpt.ifPresent(manager -> {
+            lopEntity.setReportingManagerId(manager.getEmployeeId());
+            lopEntity.setReportingManagerUsername(manager.getUsername());
+            lopEntity.setReportingManagerEmail(manager.getEmailId());
+            lopEntity.setReportingManagerName(buildDisplayName(manager));
+        });
+
+        LeaveApplication saved = leaveApplicationRepository.save(lopEntity);
+
+        managerOpt.ifPresent(manager -> createNotification(
+                manager.getUsername(),
+                "New Leave Request",
+                lopEntity.getEmployeeName() + " submitted a Loss of Pay request (" + lopEntity.getDuration() + " day"
+                        + (lopEntity.getDuration() > 1 ? "s" : "") + ").",
+                "leave-request-submitted"));
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+    }
+
     @GetMapping("/my")
     @Operation(summary = "Get My Leave Applications", description = "Returns leave requests for the currently authenticated user (matched by employeeId/username/emailId).")
     @ApiResponses(value = {

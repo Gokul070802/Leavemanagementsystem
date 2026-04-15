@@ -107,15 +107,25 @@
                         </div>
                         <div class="form-group">
                             <label for="phoneInput">Phone Number</label>
-                            <input type="text" id="phoneInput" required>
+                            <input type="text" id="phoneInput" placeholder="+91XXXXXXXXXX" pattern="^\+91\d{10}$" title="Phone must be +91 followed by exactly 10 digits" required>
                         </div>
                         <div class="form-group">
                             <label for="nationalityInput">Nationality</label>
-                            <input type="text" id="nationalityInput" required pattern="[A-Za-z\s]+" title="Nationality must contain only letters">
+                            <input type="text" id="nationalityInput" maxlength="15" pattern="^[a-zA-Z\s]+$" title="Nationality must contain only letters, max 15 characters" required>
                         </div>
                         <div class="form-group">
                             <label for="bloodGroupInput">Blood Group</label>
-                            <input type="text" id="bloodGroupInput" required pattern="^(A|B|AB|O)[+-]$" title="Enter a valid blood group e.g. A+, O-, AB+, B-">
+                            <select id="bloodGroupInput" required>
+                                <option value="">Select blood group</option>
+                                <option value="O+">O+</option>
+                                <option value="O-">O-</option>
+                                <option value="A+">A+</option>
+                                <option value="A-">A-</option>
+                                <option value="B+">B+</option>
+                                <option value="B-">B-</option>
+                                <option value="AB+">AB+</option>
+                                <option value="AB-">AB-</option>
+                            </select>
                         </div>
                         <div class="form-group">
                             <label for="maritalStatusInput">Marital Status</label>
@@ -144,7 +154,7 @@
                         </div>
                         <div class="form-group">
                             <label for="addressInput">Address</label>
-                            <input type="text" id="addressInput" required>
+                            <input type="text" id="addressInput" minlength="10" maxlength="40" title="Address must be between 10-40 characters" required>
                         </div>
                         <div class="form-buttons" style="margin-top: 30px;">
                             <button type="button" class="cancel-btn" onclick="cancelEdit()">Cancel</button>
@@ -213,6 +223,24 @@
         }
 
         function formatDateForApi(value) {
+
+               function validateDOBAge() {
+                   const dobInput = document.getElementById('dobInput');
+                   if (!dobInput || !dobInput.value) {
+                       return;
+                   }
+                   const dob = new Date(dobInput.value);
+                   const today = new Date();
+                   let age = today.getFullYear() - dob.getFullYear();
+                   const monthDiff = today.getMonth() - dob.getMonth();
+                   if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+                       age--;
+                   }
+                   if (age < 18 || age > 60) {
+                       notify('Age must be between 18 and 60 years.', 'warning');
+                       dobInput.value = '';
+                   }
+               }
             const raw = String(value || '').trim();
             if (!raw) {
                 return '';
@@ -363,6 +391,12 @@
             configureEditProfileFormForRole(loggedInUser.role);
 
             await loadEditProfile(loggedInUser.username);
+
+           // DOB age validation listener
+           const dobInput = document.getElementById('dobInput');
+           if (dobInput) {
+               dobInput.addEventListener('change', validateDOBAge);
+           }
 
             const editProfileForm = document.getElementById('editProfileForm');
             editProfileForm.addEventListener('submit', async function(e) {

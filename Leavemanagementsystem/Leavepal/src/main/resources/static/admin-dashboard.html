@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Dashboard - LeavePal</title>
+    <title>HR Dashboard - LeavePal</title>
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="stylesheet" href="dashboard-styles.css">
 </head>
@@ -50,8 +50,8 @@
         <main class="main-content admin-main">
             <header class="admin-header">
                 <div>
-                    <div class="admin-title">ADMIN DASHBOARD</div>
-                    <h1>Welcome Back, Admin</h1>
+                    <div class="admin-title">HR DASHBOARD</div>
+                    <h1>Welcome Back, HR</h1>
                 </div>
                 <div class="admin-header-actions">
                     <div class="notification-icon" id="adminResetNotificationRoot">
@@ -106,14 +106,14 @@
                             <h3 id="adminFullName">—</h3>
                         </div>
                         <div class="profile-meta">
-                            <p class="section-label">ADMIN ID</p>
+                            <p class="section-label">HR ID</p>
                             <strong id="adminId">—</strong>
                         </div>
                         <div class="profile-meta">
                             <p class="section-label">EMAIL ADDRESS</p>
                             <strong id="adminEmail">—</strong>
                         </div>
-                        <div class="profile-badge">ADMINISTRATOR</div>
+                        <div class="profile-badge">HUMAN RESOURCE</div>
                         <div class="profile-actions">
                             <button class="small-icon-btn" onclick="navigateToEditProfile()">✎</button>
                         </div>
@@ -170,7 +170,7 @@
 
             const adminName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Loading...';
             document.querySelector('.admin-user-name').textContent = adminName;
-            document.querySelector('.admin-user-role').textContent = 'Administrator';
+            document.querySelector('.admin-user-role').textContent = 'Human Resource';
             document.getElementById('adminFullName').textContent = adminName;
             document.getElementById('adminId').textContent = user.employeeId || user.username || '—';
             document.getElementById('adminEmail').textContent = user.emailId || user.username || '—';
