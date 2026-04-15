@@ -1,0 +1,251 @@
+package org.kumaran.service;
+
+import org.kumaran.entity.LeaveTrackerData;
+import org.kumaran.entity.UserAccount;
+import org.kumaran.entity.LeaveApplication;
+import org.kumaran.repository.LeaveApplicationRepository;
+import org.kumaran.repository.LeaveTrackerRepository;
+import org.kumaran.repository.UserAccountRepository;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDate;
+import java.time.YearMonth;
+import java.util.List;
+import java.util.Optional;
+
+@Service
+public class LeaveTrackerService {
+    private final LeaveTrackerRepository leaveTrackerRepository;
+    private final UserAccountRepository userRepository;
+    private final LeaveApplicationRepository leaveApplicationRepository;
+
+    public LeaveTrackerService(LeaveTrackerRepository leaveTrackerRepository,
+                               UserAccountRepository userRepository,
+                               LeaveApplicationRepository leaveApplicationRepository) {
+        this.leaveTrackerRepository = leaveTrackerRepository;
+        this.userRepository = userRepository;
+        this.leaveApplicationRepository = leaveApplicationRepository;
+    }
+
+    /**
+     * Calculate leave entitlement in the current April-March cycle.
+     *
+     * Rules:
+     * - Maximum 12 sick + 12 casual per cycle.
+     * - First cycle is prorated from joining month.
+     */
+    public int calculateCycleAccrual(String joiningDateString) {
+        if (joiningDateString == null || joiningDateString.isEmpty()) {
+            return 0;
+        }
+
+        try {
+            LocalDate joinDate = parseFlexibleDate(joiningDateString);
+            if (joinDate == null) {
+                return 0;
+            }
+
+            int currentCycleStartYear = getCycleStartYear(LocalDate.now());
+            return calculateEntitlementForCycle(joinDate, currentCycleStartYear);
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    /**
+     * Total entitlement accumulated from joining cycle to current cycle.
+     *
+     * Unused leave carry-forward is naturally represented by summing all cycle
+     * entitlements and subtracting approved usage.
+     */
+    public int calculateTotalEntitlement(String joiningDateString) {
+        if (joiningDateString == null || joiningDateString.isEmpty()) {
+            return 0;
+        }
+
+        LocalDate joinDate = parseFlexibleDate(joiningDateString);
+        if (joinDate == null) {
+            return 0;
+        }
+
+        LocalDate today = LocalDate.now();
+        int currentCycleStartYear = getCycleStartYear(today);
+        int firstCycleStartYear = getCycleStartYear(joinDate);
+
+        int total = 0;
+        for (int cycleStartYear = firstCycleStartYear; cycleStartYear <= currentCycleStartYear; cycleStartYear++) {
+            total += calculateEntitlementForCycle(joinDate, cycleStartYear);
+        }
+        return total;
+    }
+
+    /**
+     * Parse date in flexible formats
+     */
+    private LocalDate parseFlexibleDate(String dateString) {
+        try {
+            return LocalDate.parse(dateString);
+        } catch (Exception e1) {
+            try {
+                String[] parts = dateString.split("-");
+                if (parts.length == 3) {
+                    int year = Integer.parseInt(parts[2]);
+                    int month = Integer.parseInt(parts[1]);
+                    int day = Integer.parseInt(parts[0]);
+                    return LocalDate.of(year, month, day);
+                }
+            } catch (Exception e2) {
+                // Ignore
+            }
+            return null;
+        }
+    }
+
+    /**
+     * Count months inclusively between two dates
+     */
+    private int monthsInclusive(LocalDate start, LocalDate end) {
+        YearMonth startMonth = YearMonth.from(start);
+        YearMonth endMonth = YearMonth.from(end);
+        return (int) startMonth.until(endMonth, java.time.temporal.ChronoUnit.MONTHS) + 1;
+    }
+
+    private int getCycleStartYear(LocalDate date) {
+        return date.getMonthValue() >= 4 ? date.getYear() : date.getYear() - 1;
+    }
+
+    /**
+     * Calculates entitlement for a specific April-March cycle.
+     */
+    private int calculateEntitlementForCycle(LocalDate joinDate, int cycleStartYear) {
+        LocalDate cycleStart = LocalDate.of(cycleStartYear, 4, 1);
+        LocalDate cycleEnd = LocalDate.of(cycleStartYear + 1, 3, 31);
+
+        if (joinDate.isAfter(cycleEnd)) {
+            return 0;
+        }
+
+        LocalDate effectiveStart = joinDate.isAfter(cycleStart) ? joinDate : cycleStart;
+        int entitlement = monthsInclusive(effectiveStart, cycleEnd);
+        return Math.min(12, Math.max(0, entitlement));
+    }
+
+    /**
+     * Create or update leave tracker for an employee
+     */
+    public LeaveTrackerData syncLeaveTrackerForEmployee(UserAccount employee, int sickLeaveBooked, int casualLeaveBooked, int lopBooked) {
+        int totalEntitlement = calculateTotalEntitlement(employee.getJoining());
+
+        Optional<LeaveTrackerData> existing = leaveTrackerRepository.findByEmployeeId(employee.getEmployeeId());
+        LeaveTrackerData tracker;
+
+        if (existing.isPresent()) {
+            tracker = existing.get();
+        } else {
+            String employeeName = ((employee.getFirstName() != null ? employee.getFirstName() : "") + " " +
+                                  (employee.getLastName() != null ? employee.getLastName() : "")).trim();
+            if (employeeName.isEmpty()) {
+                employeeName = "Unknown Employee";
+            }
+            tracker = new LeaveTrackerData(
+                    employee.getEmployeeId(),
+                    employeeName,
+                    employee.getRole(),
+                    employee.getDepartment(),
+                    employee.getJoining()
+            );
+        }
+
+        tracker.setSickLeaveAvailable(Math.max(0, totalEntitlement - sickLeaveBooked));
+        tracker.setCasualLeaveAvailable(Math.max(0, totalEntitlement - casualLeaveBooked));
+        tracker.setLossOfPayAvailable(0);
+        tracker.setSickLeaveBooked(sickLeaveBooked);
+        tracker.setCasualLeaveBooked(casualLeaveBooked);
+        tracker.setLossOfPayBooked(lopBooked);
+
+        return leaveTrackerRepository.save(tracker);
+    }
+
+    /**
+         * Sync all workforce leave tracker data (employees and managers)
+     */
+    public void syncAllEmployeeLeaveTrackers() {
+        List<UserAccount> employees = userRepository.findByRoleIgnoreCaseIn(List.of("employee", "manager"));
+
+        for (UserAccount employee : employees) {
+            if (employee.getEmployeeId() != null) {
+                recalculateLeaveTrackerForEmployee(employee);
+            }
+        }
+    }
+
+    /**
+     * Get leave tracker for specific employee
+     */
+    public LeaveTrackerData getLeaveTrackerForEmployee(String employeeId) {
+        if (employeeId == null || employeeId.isBlank()) {
+            return null;
+        }
+
+        Optional<LeaveTrackerData> existing = leaveTrackerRepository.findByEmployeeId(employeeId);
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+
+        Optional<UserAccount> employee = userRepository.findByEmployeeId(employeeId);
+        if (employee.isEmpty()) {
+            return null;
+        }
+
+        // Build tracker only once when record does not exist.
+        return recalculateLeaveTrackerForEmployee(employee.get());
+    }
+
+    public LeaveTrackerData recalculateLeaveTrackerForEmployee(UserAccount employee) {
+        if (employee == null || employee.getEmployeeId() == null) {
+            return null;
+        }
+
+        int totalEntitlement = calculateTotalEntitlement(employee.getJoining());
+        int sickBooked = 0;
+        int casualBooked = 0;
+        int lopBooked = 0;
+
+        List<LeaveApplication> applications = leaveApplicationRepository
+            .findByIdentityAndStatusOrderByCreatedAtAsc(
+                employee.getEmployeeId(),
+                employee.getUsername(),
+                employee.getEmailId(),
+                "APPROVED"
+            );
+
+        for (LeaveApplication app : applications) {
+            int duration = app.getDuration() == null ? 0 : app.getDuration();
+            String leaveType = app.getLeaveType() == null ? "" : app.getLeaveType().trim().toLowerCase();
+
+            if (leaveType.equals("lop")) {
+                lopBooked += duration;
+            } else if (leaveType.equals("sick")) {
+                int available = Math.max(0, totalEntitlement - sickBooked);
+                int used = Math.min(duration, available);
+                sickBooked += used;
+                lopBooked += duration - used;
+            } else if (leaveType.equals("casual")) {
+                int available = Math.max(0, totalEntitlement - casualBooked);
+                int used = Math.min(duration, available);
+                casualBooked += used;
+                lopBooked += duration - used;
+            }
+        }
+
+        return syncLeaveTrackerForEmployee(employee, sickBooked, casualBooked, lopBooked);
+    }
+
+    public LeaveTrackerData updateLeaveTrackerBookingOnApproval(UserAccount employee) {
+        if (employee == null || employee.getEmployeeId() == null) {
+            return null;
+        }
+        return recalculateLeaveTrackerForEmployee(employee);
+    }
+}
+

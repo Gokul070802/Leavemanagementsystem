@@ -1,18 +1,5 @@
-window.addEventListener('pageshow', function (event) {
-    if (event.persisted) {
-        window.location.reload();
-    }
-});
-
 // Check stored preference or default to the currently active tab
-document.addEventListener('DOMContentLoaded', function () {
-    const currentUser = JSON.parse(localStorage.getItem('loggedInUser'));
-    if (currentUser && currentUser.token && (window.location.pathname.endsWith('index.html') || window.location.pathname === '/')) {
-        const redirectUrl = currentUser.role === 'admin' ? 'admin-dashboard.html' : 'dashboard.html';
-        window.location.href = redirectUrl;
-        return;
-    }
-
+document.addEventListener('DOMContentLoaded', function() {
     const notify = (message, type) => {
         if (window.showTopRightNotification) {
             window.showTopRightNotification(message, type);
@@ -30,7 +17,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // Tab switching
     const tabButtons = document.querySelectorAll('.tab-btn');
     tabButtons.forEach(button => {
-        button.addEventListener('click', function () {
+        button.addEventListener('click', function() {
             const role = this.dataset.role;
             setTheme(role);
             localStorage.setItem('loginRoleTab', role);
@@ -43,7 +30,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // Password toggle
     const togglePassword = document.getElementById('togglePassword');
     if (togglePassword) {
-        togglePassword.addEventListener('click', function (e) {
+        togglePassword.addEventListener('click', function(e) {
             e.preventDefault();
             const passwordInput = document.getElementById('password');
             const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
@@ -99,7 +86,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // Form submission
     const loginForm = document.getElementById('loginForm');
     if (loginForm) {
-        loginForm.addEventListener('submit', async function (e) {
+        loginForm.addEventListener('submit', async function(e) {
             e.preventDefault();
             const username = document.getElementById('username').value.trim();
             const password = document.getElementById('password').value;
@@ -118,7 +105,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // Forgot password form submission
     const forgotForm = document.getElementById('forgotForm');
     if (forgotForm) {
-        forgotForm.addEventListener('submit', async function (e) {
+        forgotForm.addEventListener('submit', async function(e) {
             e.preventDefault();
             const email = document.getElementById('email').value.trim();
 
@@ -259,7 +246,7 @@ function setTheme(role) {
     const body = document.body;
     const tabRole = role === 'admin' ? 'admin' : 'workforce';
     const forgotSection = document.getElementById('forgotPasswordSection');
-
+    
     if (tabRole === 'admin') {
         body.classList.remove('employee-theme');
         body.classList.add('admin-theme');
@@ -273,7 +260,7 @@ function setTheme(role) {
             forgotSection.style.display = 'block';
         }
     }
-
+    
     // Update active tab
     const tabButtons = document.querySelectorAll('.tab-btn');
     tabButtons.forEach(btn => {
