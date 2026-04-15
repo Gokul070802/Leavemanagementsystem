@@ -22,7 +22,6 @@ import org.kumaran.repository.LeaveTrackerRepository;
 import org.kumaran.repository.UserAccountRepository;
 import org.kumaran.security.JwtRequestHelper;
 import org.kumaran.service.LeaveTrackerService;
-import org.kumaran.service.SupabaseAuthService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -51,7 +50,6 @@ public class AuthController {
     private final UserAccountRepository userRepository;
     private final LeaveTrackerRepository leaveTrackerRepository;
     private final LeaveTrackerService leaveTrackerService;
-    private final SupabaseAuthService supabaseAuthService;
     private final JwtRequestHelper jwtHelper;
     private final PasswordEncoder passwordEncoder;
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
@@ -62,13 +60,11 @@ public class AuthController {
     public AuthController(UserAccountRepository userRepository,
             LeaveTrackerRepository leaveTrackerRepository,
             LeaveTrackerService leaveTrackerService,
-            SupabaseAuthService supabaseAuthService,
             JwtRequestHelper jwtHelper,
             PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.leaveTrackerRepository = leaveTrackerRepository;
         this.leaveTrackerService = leaveTrackerService;
-        this.supabaseAuthService = supabaseAuthService;
         this.jwtHelper = jwtHelper;
         this.passwordEncoder = passwordEncoder;
     }
@@ -110,13 +106,6 @@ public class AuthController {
                             "code", "PASSWORD_CHANGE_REQUIRED",
                             "message", "Temporary password detected. Please create a new password to continue.",
                             "username", user.getUsername()));
-        }
-
-        if (supabaseAuthService.isEnabled() && isEmail(user.getUsername())) {
-            boolean verified = supabaseAuthService.verifyCredentials(user.getUsername(), request.getPassword());
-            if (!verified) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid username or password");
-            }
         }
 
         String token = jwtHelper.generateToken(user.getUsername(), user.getRole());
@@ -453,16 +442,6 @@ public class AuthController {
         user.setPersonalEmail(normalizeEmail(request.getPersonalEmail()));
         user.setGender(request.getGender());
         user.setAddress(request.getAddress());
-
-        if (supabaseAuthService.isEnabled() && isEmail(user.getUsername())) {
-            supabaseAuthService.createSupabaseUser(
-                    user.getUsername(),
-                    request.getPassword(),
-                    user.getRole(),
-                    resolvedEmployeeId,
-                    user.getFirstName(),
-                    user.getLastName());
-        }
 
         userRepository.save(user);
 
@@ -859,10 +838,6 @@ public class AuthController {
         }
 
         return Optional.empty();
-    }
-
-    private boolean isEmail(String value) {
-        return value != null && value.contains("@");
     }
 
     private String generateRandomPassword(int length) {
