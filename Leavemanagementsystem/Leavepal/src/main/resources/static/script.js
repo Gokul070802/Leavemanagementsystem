@@ -93,24 +93,23 @@ document.addEventListener('DOMContentLoaded', function() {
             const activeTab = document.querySelector('.tab-btn.active');
             const selectedRole = activeTab ? activeTab.dataset.role : 'workforce';
 
+            // Validate input BEFORE login attempt
+            const emailRegex = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
+            const usernameRegex = /^[A-Za-z0-9._-]+$/;
+            const isValidLoginId = username.includes('@')
+                ? emailRegex.test(username)
+                : usernameRegex.test(username) && !username.includes(',');
+            if (!isValidLoginId) {
+                notify('Please enter a valid email address or username.', 'warning');
+                return;
+            }
+            if (password.length < 6) {
+                notify('Password must be at least 6 characters.', 'warning');
+                return;
+            }
+
             try {
                 await attemptLogin(username, password, selectedRole);
-                        const emailRegex = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
-                        const usernameRegex = /^[A-Za-z0-9._-]+$/;
-                        const isValidLoginId = username.includes('@')
-                            ? emailRegex.test(username)
-                            : usernameRegex.test(username) && !username.includes(',');
-                        if (!isValidLoginId) {
-                            notify('Please enter a valid email address or username.', 'warning');
-                            return;
-                        }
-                        if (password.length < 6) {
-                            notify('Password must be at least 6 characters.', 'warning');
-                            return;
-                        }
-
-                        try {
-                            await attemptLogin(username, password, selectedRole);
             } catch (error) {
                 console.error(error);
                 notify('Unable to connect to the authentication server.', 'error');
