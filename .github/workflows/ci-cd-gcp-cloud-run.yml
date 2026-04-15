@@ -74,7 +74,7 @@ jobs:
           REGION: ${{ secrets.GCP_REGION }}
           REPOSITORY: ${{ secrets.GCP_ARTIFACT_REPO }}
         run: |
-          IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/leave-management:${{ github.sha }}"
+          IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/leave-management-app:manual-${{ github.run_number }}"
           docker build -t "$IMAGE" .
           docker push "$IMAGE"
           echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
@@ -82,19 +82,20 @@ jobs:
       - name: Deploy to Cloud Run
         env:
           REGION: ${{ secrets.GCP_REGION }}
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
           SERVICE: ${{ secrets.GCP_CLOUD_RUN_SERVICE }}
           DB_URL: ${{ secrets.DB_URL }}
           DB_USERNAME: ${{ secrets.DB_USERNAME }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
         run: |
           gcloud run deploy "$SERVICE" \
             --image "$IMAGE" \
             --region "$REGION" \
+            --project "$PROJECT_ID" \
             --platform managed \
-            --set-env-vars "PORT=8080" \
             --set-env-vars "DB_URL=$DB_URL" \
             --set-env-vars "DB_USERNAME=$DB_USERNAME" \
-            --set-env-vars "DB_PASSWORD=$DB_PASSWORD" \
-            --set-env-vars "JWT_SECRET=$JWT_SECRET" \
+            --set-env-vars "APP_CORS_ALLOWED_ORIGINS=https://leave-management-app-460701269805.asia-south1.run.app" \
+            --set-secrets="DB_PASSWORD=DB_PASSWORD:latest" \
+            --set-secrets="JWT_SECRET=JWT_SECRET:latest" \
+            --add-cloudsql-instances "$PROJECT_ID:us-central1:leavepal" \
             --allow-unauthenticated

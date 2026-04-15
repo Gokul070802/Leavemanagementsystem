@@ -19,5 +19,7 @@ window.LEAVEPAL_ENV = window.LEAVEPAL_ENV || {};
 		return;
 	}
 
-	window.LEAVEPAL_ENV.API_BASE_URL = "https://leavepal-api-460701269805.us-central1.run.app";
+	// In production the frontend is served by the same Spring Boot service,
+	// so API calls can be relative (same-origin). Leave URL empty.
+	window.LEAVEPAL_ENV.API_BASE_URL = "";
 })();
