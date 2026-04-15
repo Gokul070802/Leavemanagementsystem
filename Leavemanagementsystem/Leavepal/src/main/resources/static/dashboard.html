@@ -89,7 +89,7 @@
             <!-- Dashboard Content -->
             <div class="dashboard-content">
                 <div class="welcome-section">
-                    <h1>Morning.</h1>
+                    <h1>Good Morning.</h1>
                     <p class="active-session">• ACTIVE SESSION</p>
                 </div>
 
@@ -187,6 +187,22 @@
                 return;
             }
 
+            // Validate token with server to prevent stale-session / URL-paste attacks
+            if (user.token && user.username) {
+                try {
+                    const sessionCheck = await fetch(`/api/users/${encodeURIComponent(user.username)}`, {
+                        headers: { 'Authorization': `Bearer ${user.token}`, 'Content-Type': 'application/json' }
+                    });
+                    if (sessionCheck.status === 401 || sessionCheck.status === 403) {
+                        localStorage.clear();
+                        window.location.href = 'index.html';
+                        return;
+                    }
+                } catch (_) {
+                    // Network error — allow to proceed (offline tolerance)
+                }
+            }
+
             currentSessionUser = user;
             initializeNotificationBell(user);
             loadEmployeeDashboard(user);
@@ -247,10 +263,19 @@
             return headers;
         }
 
+        function getGreeting() {
+            const ist = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+            const h = ist.getHours();
+            if (h >= 5 && h < 12) return 'Good Morning';
+            if (h >= 12 && h < 17) return 'Good Afternoon';
+            if (h >= 17 && h < 21) return 'Good Evening';
+            return 'Good Night';
+        }
+
         async function loadEmployeeDashboard(user) {
             const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Loading...';
             document.querySelector('.user-name').textContent = fullName;
-            document.querySelector('.welcome-section h1').textContent = `Morning, ${fullName}.`;
+            document.querySelector('.welcome-section h1').textContent = `${getGreeting()}, ${fullName}.`;
             document.getElementById('profileFullNameValue').textContent = fullName;
             document.getElementById('profileEmployeeIdValue').textContent = user.employeeId || user.username || 'N/A';
             document.getElementById('profileDesignationValue').textContent = user.designation || (user.role || '—');

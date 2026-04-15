@@ -95,6 +95,18 @@ document.addEventListener('DOMContentLoaded', function() {
 
             try {
                 await attemptLogin(username, password, selectedRole);
+                        const emailRegex = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
+                        if (!emailRegex.test(username)) {
+                            notify('Please enter a valid email address.', 'warning');
+                            return;
+                        }
+                        if (password.length < 6) {
+                            notify('Password must be at least 6 characters.', 'warning');
+                            return;
+                        }
+
+                        try {
+                            await attemptLogin(username, password, selectedRole);
             } catch (error) {
                 console.error(error);
                 notify('Unable to connect to the authentication server.', 'error');

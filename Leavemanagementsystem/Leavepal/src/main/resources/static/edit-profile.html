@@ -111,11 +111,11 @@
                         </div>
                         <div class="form-group">
                             <label for="nationalityInput">Nationality</label>
-                            <input type="text" id="nationalityInput" required>
+                            <input type="text" id="nationalityInput" required pattern="[A-Za-z\s]+" title="Nationality must contain only letters">
                         </div>
                         <div class="form-group">
                             <label for="bloodGroupInput">Blood Group</label>
-                            <input type="text" id="bloodGroupInput" required>
+                            <input type="text" id="bloodGroupInput" required pattern="^(A|B|AB|O)[+-]$" title="Enter a valid blood group e.g. A+, O-, AB+, B-">
                         </div>
                         <div class="form-group">
                             <label for="maritalStatusInput">Marital Status</label>
@@ -131,7 +131,7 @@
                         </div>
                         <div class="form-group">
                             <label for="personalEmailInput">Personal Email</label>
-                            <input type="email" id="personalEmailInput" required>
+                            <input type="email" id="personalEmailInput" required oninput="this.value=this.value.toLowerCase()">
                         </div>
                         <div class="form-group">
                             <label for="genderInput">Gender</label>
@@ -303,7 +303,7 @@
                 profile.bloodGroup = document.getElementById('bloodGroupInput').value;
                 profile.maritalStatus = document.getElementById('maritalStatusInput').value;
                 profile.dob = formatDateForApi(document.getElementById('dobInput').value);
-                profile.personalEmail = document.getElementById('personalEmailInput').value;
+                profile.personalEmail = document.getElementById('personalEmailInput').value.toLowerCase().trim();
                 profile.gender = document.getElementById('genderInput').value;
                 profile.address = document.getElementById('addressInput').value;
             }

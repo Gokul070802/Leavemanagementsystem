@@ -544,10 +544,37 @@
                 const tracker = await response.json();
                 const sickAvailable = Number(tracker.sickLeaveAvailable || 0);
                 const casualAvailable = Number(tracker.casualLeaveAvailable || 0);
+                window._availableSickLeave = sickAvailable;
+                window._availableCasualLeave = casualAvailable;
                 document.getElementById('sidebarSickCount').textContent = `${String(sickAvailable).padStart(2, '0')} Left`;
                 document.getElementById('sidebarCasualCount').textContent = `${String(casualAvailable).padStart(2, '0')} Left`;
             } catch (error) {
                 console.error('Unable to load leave balances:', error);
+            }
+
+            // Auto-LOP check: warn if requested duration exceeds available balance
+            if (leaveType === 'sick' || leaveType === 'casual') {
+                const available = leaveType === 'sick'
+                    ? (window._availableSickLeave !== undefined ? window._availableSickLeave : Infinity)
+                    : (window._availableCasualLeave !== undefined ? window._availableCasualLeave : Infinity);
+                if (duration > available) {
+                    const excess = duration - available;
+                    const leaveLabel = leaveType === 'sick' ? 'Sick' : 'Casual';
+                    const confirmed = window.confirm(
+                        `Insufficient ${leaveLabel} leave balance.\n\n` +
+                        `Available: ${available} day(s)\n` +
+                        `Requested: ${duration} day(s)\n` +
+                        `Excess ${excess} day(s) will be treated as Leave Without Pay (LOP).\n\n` +
+                        `Do you want to proceed?`
+                    );
+                    if (!confirmed) {
+                        if (applyBtn) {
+                            applyBtn.disabled = false;
+                            applyBtn.textContent = 'Apply';
+                        }
+                        return;
+                    }
+                }
             }
         }
 
