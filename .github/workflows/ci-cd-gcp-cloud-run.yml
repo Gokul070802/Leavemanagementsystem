@@ -39,11 +39,9 @@ jobs:
         env:
           DB_URL: ${{ secrets.DB_URL }}
           DB_USERNAME: ${{ secrets.DB_USERNAME }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
         run: |
           missing=0
-          for key in DB_URL DB_USERNAME DB_PASSWORD JWT_SECRET; do
+          for key in DB_URL DB_USERNAME; do
             if [ -z "${!key}" ]; then
               echo "Missing required GitHub secret: $key"
               missing=1
@@ -51,7 +49,7 @@ jobs:
           done
 
           if [ "$missing" -ne 0 ]; then
-            echo "Cloud Run deployment requires runtime app secrets in GitHub Actions."
+            echo "Cloud Run deployment requires DB_URL and DB_USERNAME in GitHub Actions secrets."
             exit 1
           fi
 
