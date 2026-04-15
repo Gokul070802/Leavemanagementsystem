@@ -91,7 +91,6 @@
             <div class="dashboard-content">
                 <div class="welcome-section">
                     <h1>Good Morning.</h1>
-                    <p class="active-session">• ACTIVE SESSION</p>
                 </div>
 
                 <div class="content-grid">
@@ -200,7 +199,7 @@
             if (user.role.toLowerCase() === 'manager') {
                 document.getElementById('managerLeaveRequestsNav').style.display = 'flex';
                 document.getElementById('managerLeaveRequestsNav').href = 'manager-leave-requests.html';
-                if (employeeNavText) employeeNavText.textContent = 'Employees';
+                if (employeeNavText) employeeNavText.textContent = 'Employee Details';
                 if (leaveTrackerNavText) leaveTrackerNavText.textContent = 'Leave Tracker';
                 if (leaveRequestsNavText) leaveRequestsNavText.textContent = 'Leave Requests';
             }
@@ -558,8 +557,7 @@
         }
 
         function logout() {
-            localStorage.clear();
-            window.location.href = 'index.html';
+            window.leavepalSecureLogout();
         }
     </script>
 </body>

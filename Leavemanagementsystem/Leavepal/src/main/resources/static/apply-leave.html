@@ -214,7 +214,7 @@
                     managerLeaveRequestsNav.style.display = 'flex';
                 }
                 if (employeeNavText) {
-                    employeeNavText.textContent = 'Employees';
+                    employeeNavText.textContent = 'Employee Details';
                 }
             }
 
@@ -321,8 +321,7 @@
         }
 
         function logout() {
-            localStorage.clear();
-            window.location.href = 'index.html';
+            window.leavepalSecureLogout();
         }
 
         function notify(message, type = 'info') {

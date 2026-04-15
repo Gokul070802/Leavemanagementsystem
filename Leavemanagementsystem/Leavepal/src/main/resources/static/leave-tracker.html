@@ -240,7 +240,7 @@
                 dashboardLink.href = 'dashboard.html';
                 leaveTrackerText.textContent = 'Leave Tracker';
                 if (currentUser.role.toLowerCase() === 'manager' && managerLeaveRequestsNav) {
-                    if (employeeNavText) employeeNavText.textContent = 'Employees';
+                    if (employeeNavText) employeeNavText.textContent = 'Employee Details';
                     if (leaveRequestsNavText) leaveRequestsNavText.textContent = 'Leave Requests';
                     managerLeaveRequestsNav.style.display = 'flex';
                 }
@@ -267,8 +267,7 @@
         });
 
         function logout() {
-            localStorage.clear();
-            window.location.href = 'index.html';
+            window.leavepalSecureLogout();
         }
 
         function navigateToApplyLeave() {

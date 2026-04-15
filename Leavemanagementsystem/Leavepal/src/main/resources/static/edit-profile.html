@@ -188,8 +188,7 @@
     <script src="selenium-hooks.js"></script>
     <script>
         function logout() {
-            localStorage.clear();
-            window.location.href = 'index.html';
+            window.leavepalSecureLogout();
         }
 
         function notify(message, type = 'info') {
@@ -461,7 +460,7 @@
                 const empNavText = document.getElementById('employeeNavText');
                 const lrNavText = document.getElementById('leaveRequestsNavText');
                 if (lrNav) lrNav.style.display = 'flex';
-                if (empNavText) empNavText.textContent = 'Employees';
+                if (empNavText) empNavText.textContent = 'Employee Details';
                 if (lrNavText) lrNavText.textContent = 'Leave Requests';
             }
 
