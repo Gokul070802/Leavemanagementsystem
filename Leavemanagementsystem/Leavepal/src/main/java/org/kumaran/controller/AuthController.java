@@ -19,7 +19,9 @@ import java.util.stream.Collectors;
 import org.kumaran.dto.CreateUserRequest;
 import org.kumaran.dto.LoginRequest;
 import org.kumaran.dto.UserResponse;
+import org.kumaran.entity.AppNotification;
 import org.kumaran.entity.UserAccount;
+import org.kumaran.repository.AppNotificationRepository;
 import org.kumaran.repository.LeaveTrackerRepository;
 import org.kumaran.repository.UserAccountRepository;
 import org.kumaran.security.JwtRequestHelper;
@@ -53,21 +55,27 @@ public class AuthController {
     private final UserAccountRepository userRepository;
     private final LeaveTrackerRepository leaveTrackerRepository;
     private final LeaveTrackerService leaveTrackerService;
+    private final AppNotificationRepository appNotificationRepository;
     private final JwtRequestHelper jwtHelper;
     private final PasswordEncoder passwordEncoder;
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
     private static final Pattern NATIONALITY_PATTERN = Pattern.compile("^[A-Za-z\\s]+$");
     private static final Pattern BLOOD_GROUP_PATTERN = Pattern.compile("^(A|B|AB|O)[+-]$", Pattern.CASE_INSENSITIVE);
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
+    private static final Pattern USERNAME_PATTERN = Pattern.compile("^[A-Za-z0-9._-]+$");
+    private static final Pattern PHONE_PATTERN = Pattern.compile("^\\+91[6-9]\\d{9}$");
+    private static final Pattern ADDRESS_PATTERN = Pattern.compile("^[a-zA-Z0-9 /().,'-]{1,255}$");
 
     public AuthController(UserAccountRepository userRepository,
             LeaveTrackerRepository leaveTrackerRepository,
             LeaveTrackerService leaveTrackerService,
+            AppNotificationRepository appNotificationRepository,
             JwtRequestHelper jwtHelper,
             PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.leaveTrackerRepository = leaveTrackerRepository;
         this.leaveTrackerService = leaveTrackerService;
+        this.appNotificationRepository = appNotificationRepository;
         this.jwtHelper = jwtHelper;
         this.passwordEncoder = passwordEncoder;
     }
@@ -163,6 +171,25 @@ public class AuthController {
         user.setPasswordResetRequested(true);
         user.setPasswordResetRequestedAt(Instant.now().toString());
         userRepository.save(user);
+
+        String requesterDisplay = ((user.getFirstName() == null ? "" : user.getFirstName()) + " "
+            + (user.getLastName() == null ? "" : user.getLastName())).trim();
+        if (requesterDisplay.isBlank()) {
+            requesterDisplay = user.getUsername();
+        }
+
+        final String adminMessage = requesterDisplay
+            + " requested a password reset. Generate a temporary password from Employee Details.";
+        userRepository.findAll().stream()
+            .filter(account -> account.getRole() != null && account.getRole().equalsIgnoreCase("admin"))
+            .map(UserAccount::getUsername)
+            .filter(Objects::nonNull)
+            .filter(usernameValue -> !usernameValue.isBlank())
+            .forEach(adminUsername -> createNotification(
+                adminUsername,
+                "Password Reset Request",
+                adminMessage,
+                "password-reset-request"));
 
         return ResponseEntity.ok("Password reset request submitted to admin notification queue.");
     }
@@ -301,6 +328,20 @@ public class AuthController {
         }
 
         UserAccount user = account.get();
+        boolean adminUser = user.getRole() != null && user.getRole().equalsIgnoreCase("admin");
+
+        Optional<String> mutableValidationError = validateMutableProfileFields(
+            request.getPhoneNumber(),
+            request.getNationality(),
+            request.getBloodGroup(),
+            request.getPersonalEmail(),
+            request.getDob(),
+            request.getAddress(),
+            adminUser);
+        if (mutableValidationError.isPresent()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(mutableValidationError.get());
+        }
+
         Optional<String> profileValidationError = validateMutableProfileFields(
                 request.getNationality(),
                 request.getBloodGroup(),
@@ -342,6 +383,11 @@ public class AuthController {
             HttpServletRequest requestContext) {
         if (!jwtHelper.isAdmin(requestContext)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Only admin users can create accounts");
+        }
+
+        Optional<String> createValidationError = validateCreateUserRequest(request);
+        if (createValidationError.isPresent()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(createValidationError.get());
         }
 
         String requestedRole = request.getRole() == null ? "" : request.getRole().trim();
@@ -616,10 +662,10 @@ public class AuthController {
     }
 
     @DeleteMapping("/users/{username}")
-    @Operation(summary = "Delete Workforce User", description = "Delete an employee or manager account by username (admin only). Also removes linked leave tracker data when present.")
+        @Operation(summary = "Delete User", description = "Delete an employee, manager, or admin account by username (admin only). Self-delete and deleting the last admin are blocked.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "User deleted successfully", content = @Content(mediaType = "text/plain")),
-            @ApiResponse(responseCode = "403", description = "Only admin users can delete workforce accounts", content = @Content(mediaType = "text/plain")),
+            @ApiResponse(responseCode = "403", description = "Only admin users can delete accounts", content = @Content(mediaType = "text/plain")),
             @ApiResponse(responseCode = "404", description = "User not found", content = @Content(mediaType = "text/plain")),
             @ApiResponse(responseCode = "409", description = "Manager has linked subordinates", content = @Content(mediaType = "text/plain"))
     })
@@ -634,7 +680,7 @@ public class AuthController {
         }
 
         if (!jwtHelper.isAdmin(request)) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Only admin users can delete workforce accounts");
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Only admin users can delete accounts");
         }
 
         String authUsername = jwtHelper.extractUsername(request);
@@ -649,8 +695,13 @@ public class AuthController {
 
         UserAccount user = account.get();
         if (user.getRole() != null && user.getRole().equalsIgnoreCase("admin")) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body("Admin accounts cannot be deleted from this screen");
+            long adminCount = userRepository.findAll().stream()
+                .filter(candidate -> candidate.getRole() != null && candidate.getRole().equalsIgnoreCase("admin"))
+                .count();
+            if (adminCount <= 1) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body("Cannot delete the last remaining admin account");
+            }
         }
 
         if (user.getRole() != null && user.getRole().equalsIgnoreCase("manager")) {
@@ -853,6 +904,126 @@ public class AuthController {
         }
 
         return Optional.empty();
+    }
+
+    private Optional<String> validateCreateUserRequest(CreateUserRequest request) {
+        if (request == null) {
+            return Optional.of("Request body is required");
+        }
+
+        String username = normalizeBlank(request.getUsername());
+        if (username == null) {
+            return Optional.of("Username is required");
+        }
+
+        if (username.contains("@")) {
+            if (!EMAIL_PATTERN.matcher(username).matches()) {
+                return Optional.of("Username email format is invalid");
+            }
+        } else if (!USERNAME_PATTERN.matcher(username).matches()) {
+            return Optional.of("Username can only contain letters, digits, dot, underscore, and hyphen");
+        }
+
+        String password = request.getPassword() == null ? "" : request.getPassword();
+        if (password.length() < 8) {
+            return Optional.of("Password must be at least 8 characters");
+        }
+
+        Optional<String> mutableValidationError = validateMutableProfileFields(
+                request.getPhoneNumber(),
+                request.getNationality(),
+                request.getBloodGroup(),
+                request.getPersonalEmail(),
+                request.getDob(),
+                request.getAddress(),
+                request.getRole() != null && request.getRole().equalsIgnoreCase("admin"));
+        if (mutableValidationError.isPresent()) {
+            return mutableValidationError;
+        }
+
+        return Optional.empty();
+    }
+
+    private Optional<String> validateMutableProfileFields(String phoneNumber,
+            String nationality,
+            String bloodGroup,
+            String personalEmail,
+            String dob,
+            String address,
+            boolean adminUser) {
+        String normalizedPhone = normalizeBlank(phoneNumber);
+        if (normalizedPhone == null || !PHONE_PATTERN.matcher(normalizedPhone).matches()) {
+            return Optional.of("Phone number must be in +91XXXXXXXXXX format and start with 6-9");
+        }
+
+        String normalizedNationality = normalizeBlank(nationality);
+        if (normalizedNationality != null) {
+            if (normalizedNationality.length() > 16) {
+                return Optional.of("Nationality must be at most 16 characters");
+            }
+            if (!NATIONALITY_PATTERN.matcher(normalizedNationality).matches()) {
+                return Optional.of("Nationality must contain only letters and spaces");
+            }
+        }
+
+        String normalizedBloodGroup = normalizeBloodGroup(bloodGroup);
+        if (normalizedBloodGroup != null && !BLOOD_GROUP_PATTERN.matcher(normalizedBloodGroup).matches()) {
+            return Optional.of("Blood group must be one of A+, A-, B+, B-, AB+, AB-, O+, or O-");
+        }
+
+        String normalizedPersonalEmail = normalizeEmail(personalEmail);
+        if (normalizedPersonalEmail != null && !EMAIL_PATTERN.matcher(normalizedPersonalEmail).matches()) {
+            return Optional.of("Personal email must be a valid lowercase email address");
+        }
+
+        if (!adminUser) {
+            String normalizedDob = normalizeBlank(dob);
+            if (normalizedDob == null) {
+                return Optional.of("Date of birth is required");
+            }
+
+            LocalDate dobDate;
+            try {
+                dobDate = LocalDate.parse(normalizedDob);
+            } catch (DateTimeParseException ex) {
+                return Optional.of("Date of birth must be in yyyy-MM-dd format");
+            }
+
+            LocalDate today = LocalDate.now();
+            if (!dobDate.isBefore(today)) {
+                return Optional.of("Date of birth cannot be today or in the future");
+            }
+
+            int age = today.getYear() - dobDate.getYear();
+            if (dobDate.plusYears(age).isAfter(today)) {
+                age -= 1;
+            }
+
+            if (age < 18 || age > 60) {
+                return Optional.of("Employee age must be between 18 and 60 years");
+            }
+
+            String normalizedAddress = normalizeBlank(address);
+            if (normalizedAddress == null) {
+                return Optional.of("Address is required");
+            }
+            if (!ADDRESS_PATTERN.matcher(normalizedAddress).matches()) {
+                return Optional.of("Address contains unsupported characters");
+            }
+        }
+
+        return Optional.empty();
+    }
+
+    private void createNotification(String recipientUsername, String title, String message, String type) {
+        AppNotification notification = new AppNotification();
+        notification.setRecipientUsername(recipientUsername);
+        notification.setTitle(title);
+        notification.setMessage(message);
+        notification.setType(type);
+        notification.setRead(false);
+        notification.setCreatedAt(Instant.now().toString());
+        appNotificationRepository.save(notification);
     }
 
     private String generateRandomPassword(int length) {

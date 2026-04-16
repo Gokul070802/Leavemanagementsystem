@@ -68,6 +68,17 @@ public class LeaveTrackerController {
         }
     }
 
+    @GetMapping("/sync-all")
+    @Operation(summary = "Sync All Employees Leave Tracker (GET Alias)", description = "Compatibility alias for clients that invoke sync-all with GET. Performs the same admin-only sync action.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "All leave trackers synced successfully", content = @Content(mediaType = "text/plain", examples = @ExampleObject(value = "All employee leave trackers synced successfully"))),
+            @ApiResponse(responseCode = "403", description = "Access denied", content = @Content(mediaType = "text/plain")),
+            @ApiResponse(responseCode = "500", description = "Internal server error", content = @Content(mediaType = "text/plain"))
+    })
+    public ResponseEntity<?> syncAllLeaveTrackersGet(HttpServletRequest request) {
+        return syncAllLeaveTrackers(request);
+    }
+
     @PostMapping("/sync")
     @Operation(summary = "Sync Leave Tracker Data", description = "Create or update leave tracker data for an employee. Automatically called when employee is created or leave is applied.")
     @io.swagger.v3.oas.annotations.parameters.RequestBody(required = true, description = "Leave tracker sync payload", content = @Content(mediaType = "application/json", examples = @ExampleObject(value = "{\n  \"employeeId\": \"LP-001\",\n  \"sickLeaveAvailable\": 4,\n  \"casualLeaveAvailable\": 4,\n  \"lossOfPayAvailable\": 0,\n  \"sickLeaveBooked\": 1,\n  \"casualLeaveBooked\": 0,\n  \"lossOfPayBooked\": 0\n}")))

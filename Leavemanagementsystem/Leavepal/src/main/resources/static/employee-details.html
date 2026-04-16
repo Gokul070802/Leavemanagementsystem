@@ -103,7 +103,7 @@
                             <span class="info-label">DEPARTMENT</span>
                             <span class="info-value" id="profileDepartment">—</span>
                         </div>
-                        <div class="info-item" id="profileReportingRow">
+                        <div class="info-item profile-details-full-width" id="profileReportingRow">
                             <span class="info-label">REPORTING TO</span>
                             <span class="info-value" id="profileReporting">—</span>
                         </div>
@@ -328,10 +328,10 @@
                 }
 
                 const data = await response.json();
-                    // Include both employees and managers in admin listing
+                    // Include employees, managers, and admins in admin listing
                     const employees = data.filter(user => {
                         const role = (user.role || '').toLowerCase();
-                        return role === 'employee' || role === 'manager';
+                        return role === 'employee' || role === 'manager' || role === 'admin';
                     });
 
                     employees.sort((a, b) => {
@@ -367,6 +367,7 @@
                         name: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
                         designation: user.designation || '—',
                         department: user.department || '—',
+                        role: (user.role || '').toLowerCase(),
                         email: user.emailId || '—',
                         passwordResetRequested: !!user.passwordResetRequested,
                         forcePasswordChange: !!user.forcePasswordChange,
@@ -379,16 +380,20 @@
                             <td>${emp.department}</td>
                             <td>${emp.email}</td>
                             <td>
-                                ${emp.passwordResetRequested
+                                ${emp.role === 'admin'
+                                    ? '<span class="leave-status">N/A</span>'
+                                    : (emp.passwordResetRequested
                                     ? '<span class="leave-status status-pending">REQUESTED</span>'
                                     : (emp.forcePasswordChange
                                         ? '<span class="leave-status status-approved">TEMP PASSWORD SET</span>'
-                                        : '<span class="leave-status">NO REQUEST</span>')}
+                                        : '<span class="leave-status">NO REQUEST</span>'))}
                             </td>
                             <td>
                                 <div class="action-buttons-row">
                                     <button class="secondary-btn" onclick="viewProfile('${escapeForAttr(emp.username)}')">VIEW PROFILE</button>
-                                    <button class="secondary-btn" onclick="generateTemporaryPassword('${escapeForAttr(emp.username)}')">SET TEMP PASSWORD</button>
+                                    ${emp.role === 'admin'
+                                        ? ''
+                                        : `<button class="secondary-btn" onclick="generateTemporaryPassword('${escapeForAttr(emp.username)}')">SET TEMP PASSWORD</button>`}
                                     <button class="danger-btn" onclick="deleteEmployee('${escapeForAttr(emp.username)}')">DELETE</button>
                                 </div>
                             </td>
