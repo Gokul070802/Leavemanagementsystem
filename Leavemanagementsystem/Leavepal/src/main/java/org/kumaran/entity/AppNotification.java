@@ -1,32 +1,47 @@
 package org.kumaran.entity;
 
-import jakarta.persistence.*;
+import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
 
 @Entity
 @Table(name = "app_notification")
+@Schema(description = "Notification item shown in the user inbox")
 public class AppNotification {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Schema(description = "Notification identifier", example = "120")
     private Long id;
 
     @Column(nullable = false)
+    @Schema(description = "Username who receives this notification", example = "john.doe@leavepal.com")
     private String recipientUsername;
 
     @Column(nullable = false)
+    @Schema(description = "Notification title", example = "New Leave Request")
     private String title;
 
     @Column(nullable = false, length = 1000)
+    @Schema(description = "Notification body text", example = "Alice submitted a Casual leave request (2 days).")
     private String message;
 
     @Column(nullable = false)
+    @Schema(description = "Notification category key", example = "leave-request-submitted")
     private String type;
 
     @Column(nullable = false)
+    @Schema(description = "Read state", example = "false")
     private boolean read = false;
 
     @Column(nullable = false)
+    @Schema(description = "Creation timestamp (ISO-8601)", example = "2026-04-16T09:42:15Z")
     private String createdAt;
 
+    @Schema(description = "Read timestamp (ISO-8601)", example = "2026-04-16T10:15:30Z")
     private String readAt;
 
     public Long getId() {
@@ -93,5 +108,3 @@ public class AppNotification {
         this.readAt = readAt;
     }
 }
-
-

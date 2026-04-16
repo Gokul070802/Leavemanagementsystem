@@ -122,7 +122,7 @@
                                 </div>
                             </div>
 
-                            <div class="info-row">
+                            <div class="info-row" id="profileManagerRow">
                                 <div class="info-item">
                                     <span class="info-label">REPORTING MANAGER</span>
                                     <span class="info-value" id="profileManagerValue">—</span>
@@ -211,8 +211,7 @@
                         headers: { 'Authorization': `Bearer ${user.token}`, 'Content-Type': 'application/json' }
                     });
                     if (sessionCheck.status === 401 || sessionCheck.status === 403) {
-                        localStorage.clear();
-                        window.location.href = 'index.html';
+                        window.leavepalSecureLogout();
                         return;
                     }
                 } catch (_) {
@@ -284,7 +283,14 @@
             document.getElementById('profileEmployeeIdValue').textContent = user.employeeId || user.username || 'N/A';
             document.getElementById('profileDesignationValue').textContent = user.designation || (user.role || '—');
             document.getElementById('profileDepartmentValue').textContent = user.department || '—';
-            document.getElementById('profileManagerValue').textContent = user.reportingName || user.reportingEmployeeId || user.reporting || '—';
+            const profileManagerRow = document.getElementById('profileManagerRow');
+            const isManager = String(user.role || '').toLowerCase() === 'manager';
+            if (profileManagerRow) {
+                profileManagerRow.style.display = isManager ? 'none' : 'flex';
+            }
+            if (!isManager) {
+                document.getElementById('profileManagerValue').textContent = user.reportingName || user.reportingEmployeeId || user.reporting || '—';
+            }
             document.getElementById('profileEmailValue').textContent = user.emailId || '—';
         }
 

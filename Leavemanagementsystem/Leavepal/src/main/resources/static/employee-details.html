@@ -103,7 +103,7 @@
                             <span class="info-label">DEPARTMENT</span>
                             <span class="info-value" id="profileDepartment">—</span>
                         </div>
-                        <div class="info-item">
+                        <div class="info-item" id="profileReportingRow">
                             <span class="info-label">REPORTING TO</span>
                             <span class="info-value" id="profileReporting">—</span>
                         </div>
@@ -203,6 +203,10 @@
             }
 
             const role = String(user.role || '').toLowerCase();
+            const profileReportingRow = document.getElementById('profileReportingRow');
+            if (profileReportingRow) {
+                profileReportingRow.style.display = role === 'manager' ? 'none' : 'block';
+            }
 
             const dashboardLink = document.getElementById('dashboardLink');
             const leaveTrackerText = document.getElementById('leaveTrackerText');
@@ -282,7 +286,10 @@
                 document.getElementById('profilePhone').textContent = profile.phoneNumber || '';
                 document.getElementById('profileDesignation').textContent = profile.designation || '';
                 document.getElementById('profileDepartment').textContent = profile.department || '';
-                document.getElementById('profileReporting').textContent = getReportingDisplayName(profile);
+                const isManagerProfile = String(profile.role || '').toLowerCase() === 'manager';
+                if (!isManagerProfile) {
+                    document.getElementById('profileReporting').textContent = getReportingDisplayName(profile);
+                }
                 document.getElementById('profileLocation').textContent = profile.location || '';
                 document.getElementById('profileJoining').textContent = profile.joining || '';
                 document.getElementById('profileNationality').textContent = profile.nationality || '';

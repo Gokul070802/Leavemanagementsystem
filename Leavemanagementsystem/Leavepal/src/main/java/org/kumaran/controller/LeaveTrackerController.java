@@ -1,6 +1,9 @@
 package org.kumaran.controller;
 
-import jakarta.servlet.http.HttpServletRequest;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+
 import org.kumaran.entity.LeaveTrackerData;
 import org.kumaran.entity.UserAccount;
 import org.kumaran.repository.LeaveTrackerRepository;
@@ -9,19 +12,24 @@ import org.kumaran.security.JwtRequestHelper;
 import org.kumaran.service.LeaveTrackerService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.Schema;
-
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
+import jakarta.servlet.http.HttpServletRequest;
 
 @RestController
 @RequestMapping("/api/leave-tracker")
@@ -32,7 +40,8 @@ public class LeaveTrackerController {
     private final LeaveTrackerService leaveTrackerService;
     private final JwtRequestHelper jwtHelper;
 
-    public LeaveTrackerController(LeaveTrackerRepository leaveTrackerRepository, UserAccountRepository userRepository, LeaveTrackerService leaveTrackerService, JwtRequestHelper jwtHelper) {
+    public LeaveTrackerController(LeaveTrackerRepository leaveTrackerRepository, UserAccountRepository userRepository,
+            LeaveTrackerService leaveTrackerService, JwtRequestHelper jwtHelper) {
         this.leaveTrackerRepository = leaveTrackerRepository;
         this.userRepository = userRepository;
         this.leaveTrackerService = leaveTrackerService;
@@ -40,14 +49,10 @@ public class LeaveTrackerController {
     }
 
     @PostMapping("/sync-all")
-    @Operation(
-        summary = "Sync All Employees Leave Tracker",
-        description = "Initialize or refresh leave tracker data for all employees in the system"
-    )
+    @Operation(summary = "Sync All Employees Leave Tracker", description = "Initialize or refresh leave tracker data for all employees in the system")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "All leave trackers synced successfully"),
-        @ApiResponse(responseCode = "500", description = "Internal server error",
-            content = @Content(mediaType = "text/plain"))
+            @ApiResponse(responseCode = "200", description = "All leave trackers synced successfully", content = @Content(mediaType = "text/plain", examples = @ExampleObject(value = "All employee leave trackers synced successfully"))),
+            @ApiResponse(responseCode = "500", description = "Internal server error", content = @Content(mediaType = "text/plain"))
     })
     public ResponseEntity<?> syncAllLeaveTrackers(HttpServletRequest request) {
         if (!jwtHelper.isAdmin(request)) {
@@ -58,25 +63,21 @@ public class LeaveTrackerController {
             leaveTrackerService.syncAllEmployeeLeaveTrackers();
             return ResponseEntity.ok("All employee leave trackers synced successfully");
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error syncing leave trackers: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Error syncing leave trackers: " + e.getMessage());
         }
     }
 
     @PostMapping("/sync")
-    @Operation(
-        summary = "Sync Leave Tracker Data",
-        description = "Create or update leave tracker data for an employee. Automatically called when employee is created or leave is applied."
-    )
+    @Operation(summary = "Sync Leave Tracker Data", description = "Create or update leave tracker data for an employee. Automatically called when employee is created or leave is applied.")
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(required = true, description = "Leave tracker sync payload", content = @Content(mediaType = "application/json", examples = @ExampleObject(value = "{\n  \"employeeId\": \"LP-001\",\n  \"sickLeaveAvailable\": 4,\n  \"casualLeaveAvailable\": 4,\n  \"lossOfPayAvailable\": 0,\n  \"sickLeaveBooked\": 1,\n  \"casualLeaveBooked\": 0,\n  \"lossOfPayBooked\": 0\n}")))
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Leave tracker data synced successfully",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = LeaveTrackerData.class))),
-        @ApiResponse(responseCode = "404", description = "Employee not found",
-            content = @Content(mediaType = "text/plain")),
-        @ApiResponse(responseCode = "500", description = "Internal server error",
-            content = @Content(mediaType = "text/plain"))
+            @ApiResponse(responseCode = "200", description = "Leave tracker data synced successfully", content = @Content(mediaType = "application/json", schema = @Schema(implementation = LeaveTrackerData.class))),
+            @ApiResponse(responseCode = "404", description = "Employee not found", content = @Content(mediaType = "text/plain")),
+            @ApiResponse(responseCode = "500", description = "Internal server error", content = @Content(mediaType = "text/plain"))
     })
     public ResponseEntity<?> syncLeaveTrackerData(@RequestBody LeaveTrackerData request,
-                                                  HttpServletRequest httpRequest) {
+            HttpServletRequest httpRequest) {
         Optional<UserAccount> employeeOpt = userRepository.findByEmployeeId(request.getEmployeeId());
         if (employeeOpt.isEmpty()) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Employee not found");
@@ -103,15 +104,14 @@ public class LeaveTrackerController {
             tracker.setCasualLeaveBooked(request.getCasualLeaveBooked());
             tracker.setLossOfPayBooked(request.getLossOfPayBooked());
         } else {
-            String employeeName = (employee.getFirstName() != null ? employee.getFirstName() : "") + " " + 
-                                  (employee.getLastName() != null ? employee.getLastName() : "");
+            String employeeName = (employee.getFirstName() != null ? employee.getFirstName() : "") + " " +
+                    (employee.getLastName() != null ? employee.getLastName() : "");
             tracker = new LeaveTrackerData(
-                request.getEmployeeId(),
-                employeeName.trim(),
-                employee.getDesignation(),
-                employee.getDepartment(),
-                employee.getJoining()
-            );
+                    request.getEmployeeId(),
+                    employeeName.trim(),
+                    employee.getDesignation(),
+                    employee.getDepartment(),
+                    employee.getJoining());
             tracker.setSickLeaveAvailable(request.getSickLeaveAvailable());
             tracker.setCasualLeaveAvailable(request.getCasualLeaveAvailable());
             tracker.setLossOfPayAvailable(request.getLossOfPayAvailable());
@@ -125,23 +125,18 @@ public class LeaveTrackerController {
     }
 
     @GetMapping("/{employeeId}")
-    @Operation(
-        summary = "Get Leave Tracker by Employee ID",
-        description = "Retrieve leave tracker data for a specific employee"
-    )
+    @Operation(summary = "Get Leave Tracker by Employee ID", description = "Retrieve leave tracker data for a specific employee")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Leave tracker retrieved successfully",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = LeaveTrackerData.class))),
-        @ApiResponse(responseCode = "404", description = "Leave tracker not found for employee",
-            content = @Content(mediaType = "text/plain"))
+            @ApiResponse(responseCode = "200", description = "Leave tracker retrieved successfully", content = @Content(mediaType = "application/json", schema = @Schema(implementation = LeaveTrackerData.class))),
+            @ApiResponse(responseCode = "404", description = "Leave tracker not found for employee", content = @Content(mediaType = "text/plain"))
     })
     public ResponseEntity<?> getLeaveTrackerByEmployeeId(
-        @Parameter(description = "Employee ID", required = true, example = "LP-001")
-        @PathVariable String employeeId,
-        HttpServletRequest request) {
+            @Parameter(description = "Employee ID", required = true, example = "LP-001") @PathVariable String employeeId,
+            HttpServletRequest request) {
         Optional<UserAccount> employee = userRepository.findByEmployeeId(employeeId);
         if (employee.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Leave tracker not found for employee: " + employeeId);
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("Leave tracker not found for employee: " + employeeId);
         }
 
         if (!jwtHelper.isAdmin(request)) {
@@ -154,46 +149,38 @@ public class LeaveTrackerController {
 
         LeaveTrackerData tracker = leaveTrackerService.getLeaveTrackerForEmployee(employeeId);
         if (tracker == null) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Leave tracker not found for employee: " + employeeId);
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("Leave tracker not found for employee: " + employeeId);
         }
 
         return ResponseEntity.ok(tracker);
     }
 
     @GetMapping("/department/{department}")
-    @Operation(
-        summary = "Get Leave Tracker by Department",
-        description = "Retrieve leave tracker data for all employees in a specific department"
-    )
+    @Operation(summary = "Get Leave Tracker by Department", description = "Retrieve leave tracker data for all employees in a specific department")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Leave trackers retrieved successfully",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = LeaveTrackerData.class))),
-        @ApiResponse(responseCode = "404", description = "No employees found in department",
-            content = @Content(mediaType = "text/plain"))
+            @ApiResponse(responseCode = "200", description = "Leave trackers retrieved successfully", content = @Content(mediaType = "application/json", schema = @Schema(implementation = LeaveTrackerData.class))),
+            @ApiResponse(responseCode = "404", description = "No employees found in department", content = @Content(mediaType = "text/plain"))
     })
     public ResponseEntity<?> getLeaveTrackerByDepartment(
-        @Parameter(description = "Department name", required = true, example = "Engineering")
-        @PathVariable String department,
-        HttpServletRequest request) {
+            @Parameter(description = "Department name", required = true, example = "Engineering") @PathVariable String department,
+            HttpServletRequest request) {
         if (!jwtHelper.isAdmin(request)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Access denied");
         }
 
         List<LeaveTrackerData> trackers = leaveTrackerRepository.findByDepartment(department);
         if (trackers.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("No leave trackers found for department: " + department);
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("No leave trackers found for department: " + department);
         }
         return ResponseEntity.ok(trackers);
     }
 
     @GetMapping
-    @Operation(
-        summary = "Get All Leave Trackers",
-        description = "Retrieve leave tracker data for all employees sorted by employee ID"
-    )
+    @Operation(summary = "Get All Leave Trackers", description = "Retrieve leave tracker data for all employees sorted by employee ID")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Leave trackers retrieved successfully",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = LeaveTrackerData.class)))
+            @ApiResponse(responseCode = "200", description = "Leave trackers retrieved successfully", content = @Content(mediaType = "application/json", schema = @Schema(implementation = LeaveTrackerData.class)))
     })
     public ResponseEntity<List<LeaveTrackerData>> getAllLeaveTrackers(HttpServletRequest request) {
         if (!jwtHelper.isAdmin(request)) {
@@ -205,28 +192,23 @@ public class LeaveTrackerController {
     }
 
     @PutMapping("/{employeeId}")
-    @Operation(
-        summary = "Update Leave Tracker Data",
-        description = "Update leave tracker information for a specific employee"
-    )
+    @Operation(summary = "Update Leave Tracker Data", description = "Update leave tracker information for a specific employee")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Leave tracker updated successfully",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = LeaveTrackerData.class))),
-        @ApiResponse(responseCode = "404", description = "Leave tracker not found",
-            content = @Content(mediaType = "text/plain"))
+            @ApiResponse(responseCode = "200", description = "Leave tracker updated successfully", content = @Content(mediaType = "application/json", schema = @Schema(implementation = LeaveTrackerData.class))),
+            @ApiResponse(responseCode = "404", description = "Leave tracker not found", content = @Content(mediaType = "text/plain"))
     })
     public ResponseEntity<?> updateLeaveTracker(
-        @Parameter(description = "Employee ID", required = true, example = "LP-001")
-        @PathVariable String employeeId,
-        @RequestBody LeaveTrackerData request,
-        HttpServletRequest httpRequest) {
+            @Parameter(description = "Employee ID", required = true, example = "LP-001") @PathVariable String employeeId,
+            @RequestBody LeaveTrackerData request,
+            HttpServletRequest httpRequest) {
         if (!jwtHelper.isAdmin(httpRequest)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Access denied");
         }
 
         Optional<LeaveTrackerData> existing = leaveTrackerRepository.findByEmployeeId(employeeId);
         if (existing.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Leave tracker not found for employee: " + employeeId);
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("Leave tracker not found for employee: " + employeeId);
         }
 
         LeaveTrackerData tracker = Objects.requireNonNull(existing.get());
@@ -254,26 +236,22 @@ public class LeaveTrackerController {
     }
 
     @DeleteMapping("/{employeeId}")
-    @Operation(
-        summary = "Delete Leave Tracker Data",
-        description = "Delete leave tracker data for a specific employee"
-    )
+    @Operation(summary = "Delete Leave Tracker Data", description = "Delete leave tracker data for a specific employee")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "204", description = "Leave tracker deleted successfully"),
-        @ApiResponse(responseCode = "404", description = "Leave tracker not found",
-            content = @Content(mediaType = "text/plain"))
+            @ApiResponse(responseCode = "204", description = "Leave tracker deleted successfully"),
+            @ApiResponse(responseCode = "404", description = "Leave tracker not found", content = @Content(mediaType = "text/plain"))
     })
     public ResponseEntity<?> deleteLeaveTracker(
-        @Parameter(description = "Employee ID", required = true, example = "LP-001")
-        @PathVariable String employeeId,
-        HttpServletRequest request) {
+            @Parameter(description = "Employee ID", required = true, example = "LP-001") @PathVariable String employeeId,
+            HttpServletRequest request) {
         if (!jwtHelper.isAdmin(request)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Access denied");
         }
 
         Optional<LeaveTrackerData> existing = leaveTrackerRepository.findByEmployeeId(employeeId);
         if (existing.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Leave tracker not found for employee: " + employeeId);
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("Leave tracker not found for employee: " + employeeId);
         }
 
         LeaveTrackerData trackerToDelete = Objects.requireNonNull(existing.get());
@@ -281,5 +259,3 @@ public class LeaveTrackerController {
         return ResponseEntity.noContent().build();
     }
 }
-
-

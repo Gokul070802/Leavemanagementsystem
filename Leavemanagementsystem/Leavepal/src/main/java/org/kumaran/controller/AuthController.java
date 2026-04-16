@@ -39,6 +39,7 @@ import org.springframework.web.bind.annotation.RestController;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -119,8 +120,12 @@ public class AuthController {
 
     @PostMapping("/auth/forgot-password-request")
     @Operation(summary = "Request Password Reset", description = "Creates a password reset request for an existing employee or manager account. Unknown usernames/emails are rejected, admin accounts are not eligible, and repeat requests return an already-pending message.")
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(required = true, description = "Password reset request payload", content = @Content(mediaType = "application/json", examples = {
+            @ExampleObject(name = "By username", value = "{\n  \"usernameOrEmail\": \"john.doe\"\n}"),
+            @ExampleObject(name = "By email", value = "{\n  \"usernameOrEmail\": \"john.doe@leavepal.com\"\n}")
+    }))
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Reset request queued successfully", content = @Content(mediaType = "text/plain")),
+            @ApiResponse(responseCode = "200", description = "Reset request queued successfully", content = @Content(mediaType = "text/plain", examples = @ExampleObject(value = "Password reset request submitted to admin notification queue."))),
             @ApiResponse(responseCode = "400", description = "Username or email is missing or account is not eligible", content = @Content(mediaType = "text/plain")),
             @ApiResponse(responseCode = "404", description = "Workforce account not found", content = @Content(mediaType = "text/plain"))
     })
@@ -165,7 +170,7 @@ public class AuthController {
     @PostMapping("/users/{username}/generate-temporary-password")
     @Operation(summary = "Generate Temporary Password", description = "Admin-only endpoint to generate and assign a temporary password for employee/manager accounts.")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Temporary password generated successfully"),
+            @ApiResponse(responseCode = "200", description = "Temporary password generated successfully", content = @Content(mediaType = "application/json", examples = @ExampleObject(value = "{\n  \"temporaryPassword\": \"Qm9@4vXk2P\",\n  \"username\": \"john.doe@leavepal.com\",\n  \"message\": \"Temporary password generated. Share this password securely with the employee.\"\n}"))),
             @ApiResponse(responseCode = "400", description = "Unsupported target role", content = @Content(mediaType = "text/plain")),
             @ApiResponse(responseCode = "403", description = "Only admin users can generate passwords", content = @Content(mediaType = "text/plain")),
             @ApiResponse(responseCode = "404", description = "User not found", content = @Content(mediaType = "text/plain"))
@@ -204,8 +209,9 @@ public class AuthController {
 
     @PostMapping("/auth/reset-temporary-password")
     @Operation(summary = "Reset Temporary Password", description = "Completes first-login password change using the temporary password.")
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(required = true, description = "Temporary password reset payload", content = @Content(mediaType = "application/json", examples = @ExampleObject(value = "{\n  \"username\": \"john.doe@leavepal.com\",\n  \"currentPassword\": \"Qm9@4vXk2P\",\n  \"newPassword\": \"Password@123\",\n  \"confirmPassword\": \"Password@123\"\n}")))
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Password updated successfully", content = @Content(mediaType = "text/plain")),
+            @ApiResponse(responseCode = "200", description = "Password updated successfully", content = @Content(mediaType = "text/plain", examples = @ExampleObject(value = "Password updated successfully. You can now login."))),
             @ApiResponse(responseCode = "400", description = "Invalid request payload or reset not required", content = @Content(mediaType = "text/plain")),
             @ApiResponse(responseCode = "401", description = "Temporary password is incorrect", content = @Content(mediaType = "text/plain")),
             @ApiResponse(responseCode = "404", description = "User not found", content = @Content(mediaType = "text/plain"))
@@ -492,7 +498,7 @@ public class AuthController {
     @GetMapping("/users/next-employee-id")
     @Operation(summary = "Get Next Employee ID", description = "Generate and retrieve the next sequential employee ID (admin only). Returns ID in format LP-XXX.")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Next employee ID generated successfully", content = @Content(mediaType = "application/json")),
+            @ApiResponse(responseCode = "200", description = "Next employee ID generated successfully", content = @Content(mediaType = "application/json", examples = @ExampleObject(value = "{\n  \"nextEmployeeId\": \"LP-042\"\n}"))),
             @ApiResponse(responseCode = "403", description = "Only admin users can access this endpoint", content = @Content(mediaType = "text/plain"))
     })
     public ResponseEntity<?> getNextEmployeeId(HttpServletRequest request) {

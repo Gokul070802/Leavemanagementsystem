@@ -9,8 +9,8 @@ document.addEventListener('DOMContentLoaded', function() {
     };
 
     const activeTab = document.querySelector('.tab-btn.active');
-    const savedTab = localStorage.getItem('loginRoleTab');
-    const savedRole = localStorage.getItem('userRole');
+    const savedTab = sessionStorage.getItem('loginRoleTab');
+    const savedRole = sessionStorage.getItem('userRole');
     const preferredTab = savedTab || (savedRole && savedRole.toLowerCase() === 'admin' ? 'admin' : (activeTab ? activeTab.dataset.role : 'workforce'));
     setTheme(preferredTab);
 
@@ -20,7 +20,7 @@ document.addEventListener('DOMContentLoaded', function() {
         button.addEventListener('click', function() {
             const role = this.dataset.role;
             setTheme(role);
-            localStorage.setItem('loginRoleTab', role);
+            sessionStorage.setItem('loginRoleTab', role);
 
             tabButtons.forEach(btn => btn.classList.remove('active'));
             this.classList.add('active');
@@ -76,6 +76,8 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         const user = await response.json();
+        sessionStorage.setItem('loggedInUser', JSON.stringify(user));
+        sessionStorage.setItem('userRole', user.role);
         localStorage.setItem('loggedInUser', JSON.stringify(user));
         localStorage.setItem('userRole', user.role);
 

@@ -11,6 +11,9 @@
 
     function clearAuthState() {
         try {
+            sessionStorage.removeItem('loggedInUser');
+            sessionStorage.removeItem('userRole');
+            sessionStorage.removeItem('loginRoleTab');
             localStorage.removeItem('loggedInUser');
             localStorage.removeItem('userRole');
             localStorage.removeItem('loginRoleTab');
@@ -46,7 +49,7 @@
 
     function getUser() {
         try {
-            return JSON.parse(localStorage.getItem('loggedInUser'));
+            return JSON.parse(sessionStorage.getItem('loggedInUser'));
         } catch (e) {
             return null;
         }

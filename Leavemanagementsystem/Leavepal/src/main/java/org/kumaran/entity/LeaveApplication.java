@@ -1,67 +1,101 @@
 package org.kumaran.entity;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import jakarta.persistence.*;
+
+import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.PreUpdate;
+import jakarta.persistence.Table;
 
 @Entity
 @Table(name = "leave_application")
+@Schema(description = "Leave application request and review state")
 public class LeaveApplication {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Schema(description = "Leave request identifier", example = "101")
     private Long id;
 
     @Column(nullable = false)
+    @Schema(description = "Employee ID of applicant", example = "LP-007")
     private String employeeId;
 
     @Column(nullable = false)
+    @Schema(description = "Username of applicant", example = "john.doe@leavepal.com")
     private String username;
 
     @Column(nullable = false)
+    @Schema(description = "Official email of applicant", example = "john.doe@leavepal.com")
     private String emailId;
 
+    @Schema(description = "Reporting manager employee ID", example = "LP-002")
     private String reportingManagerId;
+    @Schema(description = "Reporting manager username", example = "manager.ravi@leavepal.com")
     private String reportingManagerUsername;
+    @Schema(description = "Reporting manager email", example = "manager.ravi@leavepal.com")
     private String reportingManagerEmail;
+    @Schema(description = "Reporting manager display name", example = "Ravi Kumar")
     private String reportingManagerName;
 
     @Column(nullable = false)
+    @Schema(description = "Applicant full name", example = "John Doe")
     private String employeeName;
 
     @Column(nullable = false)
+    @Schema(description = "Type of leave", example = "casual", allowableValues = { "sick", "casual", "lop" })
     private String leaveType;
 
     @Column(nullable = false)
+    @Schema(description = "Leave start date", example = "2026-04-20")
     private String fromDate;
 
     @Column(nullable = false)
+    @Schema(description = "Leave end date", example = "2026-04-21")
     private String toDate;
 
     @Column(nullable = false)
+    @Schema(description = "Requested days", example = "2")
     private Integer duration;
 
+    @Schema(description = "Reason entered by requester", example = "Family function")
     private String reason;
 
+    @Schema(description = "Uploaded proof name (sick leave)", example = "medical-certificate.pdf")
     private String sickAttachmentName;
 
     @Column(columnDefinition = "TEXT")
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+    @Schema(description = "Base64 attachment payload (write only)", example = "JVBERi0xLjQKJcTl8uXrp...==")
     private String sickAttachmentData;
 
     @Column(nullable = false)
+    @Schema(description = "Current workflow status", example = "PENDING", allowableValues = { "PENDING", "APPROVED",
+            "REJECTED" })
     private String status = "PENDING";
 
     @Column(nullable = false)
+    @Schema(description = "Date when leave was applied", example = "2026-04-16")
     private String appliedDate;
 
+    @Schema(description = "Review timestamp", example = "2026-04-17T12:11:08Z")
     private String reviewedAt;
+    @Schema(description = "Reviewer username", example = "manager.ravi@leavepal.com")
     private String reviewedBy;
+    @Schema(description = "Reason for rejection when status is REJECTED", example = "Critical release timeline")
     private String rejectionReason;
+    @Schema(description = "Manager/admin comment", example = "Approved. Ensure handover before leave.")
     private String managerComment;
 
     @Column(nullable = false, updatable = false)
+    @Schema(description = "Creation timestamp in epoch millis", example = "1776115200000")
     private Long createdAt = System.currentTimeMillis();
 
     @Column(nullable = false)
+    @Schema(description = "Last update timestamp in epoch millis", example = "1776201600000")
     private Long updatedAt = System.currentTimeMillis();
 
     @PreUpdate
@@ -261,5 +295,3 @@ public class LeaveApplication {
         this.updatedAt = updatedAt;
     }
 }
-
-

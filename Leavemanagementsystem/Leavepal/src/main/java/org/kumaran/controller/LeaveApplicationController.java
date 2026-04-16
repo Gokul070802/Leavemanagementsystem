@@ -38,6 +38,7 @@ import org.springframework.web.bind.annotation.RestController;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -165,6 +166,7 @@ public class LeaveApplicationController {
 
     @PostMapping("/auto-lop")
     @Operation(summary = "Auto-Create LOP Application", description = "Automatically creates a Loss of Pay (LOP) application for excess leave days when a user applies for more days than their balance.")
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(required = true, description = "Auto LOP creation payload", content = @Content(mediaType = "application/json", examples = @ExampleObject(value = "{\n  \"fromDate\": \"2026-04-17\",\n  \"toDate\": \"2026-04-19\",\n  \"duration\": 2,\n  \"reason\": \"Insufficient casual leave balance\"\n}")))
     @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "LOP application created successfully", content = @Content(mediaType = "application/json", schema = @Schema(implementation = LeaveApplication.class))),
             @ApiResponse(responseCode = "400", description = "Invalid LOP request payload", content = @Content(mediaType = "text/plain")),
@@ -380,6 +382,10 @@ public class LeaveApplicationController {
 
     @PatchMapping("/{id}/status")
     @Operation(summary = "Update Leave Request Status", description = "Approves or rejects a pending leave request. Allowed for admins and authorized managers.")
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(required = true, description = "Status update payload", content = @Content(mediaType = "application/json", examples = {
+            @ExampleObject(name = "Approve", value = "{\n  \"status\": \"APPROVED\",\n  \"managerComment\": \"Approved for planned vacation\"\n}"),
+            @ExampleObject(name = "Reject", value = "{\n  \"status\": \"REJECTED\",\n  \"rejectionReason\": \"Project deadline conflict\"\n}")
+    }))
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Leave status updated successfully", content = @Content(mediaType = "application/json", schema = @Schema(implementation = LeaveApplication.class))),
             @ApiResponse(responseCode = "400", description = "Invalid status transition or invalid payload", content = @Content(mediaType = "text/plain")),
