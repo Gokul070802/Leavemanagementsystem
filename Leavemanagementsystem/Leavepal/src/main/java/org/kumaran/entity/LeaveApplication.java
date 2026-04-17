@@ -8,11 +8,16 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 
 @Entity
-@Table(name = "leave_application")
+@Table(name = "leave_application", indexes = {
+        @Index(name = "idx_leave_username", columnList = "username"),
+        @Index(name = "idx_leave_employee_id", columnList = "employeeId"),
+        @Index(name = "idx_leave_status", columnList = "status")
+})
 @Schema(description = "Leave application request and review state")
 public class LeaveApplication {
     @Id

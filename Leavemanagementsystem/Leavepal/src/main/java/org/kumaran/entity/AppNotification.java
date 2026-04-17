@@ -6,10 +6,14 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 
 @Entity
-@Table(name = "app_notification")
+@Table(name = "app_notification", indexes = {
+        @Index(name = "idx_notification_recipient", columnList = "recipientUsername"),
+        @Index(name = "idx_notification_recipient_read", columnList = "recipientUsername, read")
+})
 @Schema(description = "Notification item shown in the user inbox")
 public class AppNotification {
     @Id

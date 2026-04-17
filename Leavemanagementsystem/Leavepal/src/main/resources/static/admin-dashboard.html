@@ -228,12 +228,17 @@
 
             adminDashboardRefreshTimer = window.setInterval(() => {
                 loadDashboardData();
-            }, 15000);
+            }, 60000);
 
-            window.addEventListener('focus', loadDashboardData);
+            let focusDebounceTimer = null;
+            window.addEventListener('focus', function() {
+                clearTimeout(focusDebounceTimer);
+                focusDebounceTimer = setTimeout(loadDashboardData, 5000);
+            });
             document.addEventListener('visibilitychange', function() {
                 if (document.visibilityState === 'visible') {
-                    loadDashboardData();
+                    clearTimeout(focusDebounceTimer);
+                    focusDebounceTimer = setTimeout(loadDashboardData, 5000);
                 }
             });
             window.addEventListener('beforeunload', function() {
@@ -369,16 +374,14 @@
 
             adminDashboardLoading = true;
             try {
-                const usersResponse = await fetch('/api/users', {
-                    headers: getAuthHeaders(),
-                    cache: 'no-store'
-                });
+                const [usersResponse, leaveResponse] = await Promise.all([
+                    fetch('/api/users', { headers: getAuthHeaders() }),
+                    fetch('/api/leave-applications/all', { headers: getAuthHeaders() })
+                ]);
 
                 if (usersResponse.status === 401 || usersResponse.status === 403) {
                     notify('Session expired. Please login again.', 'warning');
-                    setTimeout(() => {
-                        logout();
-                    }, 700);
+                    setTimeout(() => { logout(); }, 700);
                     return;
                 }
 
@@ -389,6 +392,7 @@
                 }
 
                 const data = await usersResponse.json();
+                const applications = leaveResponse.ok ? await leaveResponse.json() : [];
 
                     adminResetRequests = data.filter(user => {
                         const role = (user.role || '').toLowerCase();
@@ -414,11 +418,6 @@
 
                     const pendingNode = document.getElementById('pendingRequestsCount');
                     if (pendingNode) {
-                        const leaveResponse = await fetch('/api/leave-applications/all', {
-                            headers: getAuthHeaders(),
-                            cache: 'no-store'
-                        });
-                        const applications = leaveResponse.ok ? await leaveResponse.json() : [];
                         const pendingApplications = applications.filter(app => {
                             const appKeys = [app.employeeId, app.username, app.emailId]
                                 .map(normalizeKey)

@@ -334,8 +334,7 @@
         async function loadManagerSubordinates() {
             try {
                 const response = await fetch('/api/users/subordinates', {
-                    headers: getAuthHeaders(),
-                    cache: 'no-store'
+                    headers: getAuthHeaders()
                 });
                 if (!response.ok) {
                     return [];
@@ -420,8 +419,7 @@
 
         async function getNotificationsForUser() {
             const response = await fetch('/api/notifications/my', {
-                headers: getAuthHeaders(),
-                cache: 'no-store'
+                headers: getAuthHeaders()
             });
             if (!response.ok) {
                 return [];
@@ -461,15 +459,22 @@
 
             dashboardRefreshTimer = setInterval(function() {
                 refreshDashboardLiveData(user);
-            }, 10000);
+            }, 60000);
 
+            let focusDebounceTimer = null;
             window.addEventListener('focus', function() {
-                refreshDashboardLiveData(user);
+                clearTimeout(focusDebounceTimer);
+                focusDebounceTimer = setTimeout(function() {
+                    refreshDashboardLiveData(user);
+                }, 5000);
             });
 
             document.addEventListener('visibilitychange', function() {
                 if (!document.hidden) {
-                    refreshDashboardLiveData(user);
+                    clearTimeout(focusDebounceTimer);
+                    focusDebounceTimer = setTimeout(function() {
+                        refreshDashboardLiveData(user);
+                    }, 5000);
                 }
             });
 

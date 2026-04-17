@@ -5,6 +5,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.HashMap;
 import java.util.List;
@@ -1000,7 +1001,15 @@ public class AuthController {
             try {
                 dobDate = LocalDate.parse(normalizedDob);
             } catch (DateTimeParseException ex) {
-                return Optional.of("Date of birth must be in yyyy-MM-dd format");
+                try {
+                    dobDate = LocalDate.parse(normalizedDob, DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+                } catch (DateTimeParseException ex2) {
+                    try {
+                        dobDate = LocalDate.parse(normalizedDob, DateTimeFormatter.ofPattern("dd-MM-yyyy"));
+                    } catch (DateTimeParseException ex3) {
+                        return Optional.of("Date of birth must be in yyyy-MM-dd format");
+                    }
+                }
             }
 
             LocalDate today = LocalDate.now();
