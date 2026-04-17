@@ -173,23 +173,23 @@ public class AuthController {
         userRepository.save(user);
 
         String requesterDisplay = ((user.getFirstName() == null ? "" : user.getFirstName()) + " "
-            + (user.getLastName() == null ? "" : user.getLastName())).trim();
+                + (user.getLastName() == null ? "" : user.getLastName())).trim();
         if (requesterDisplay.isBlank()) {
             requesterDisplay = user.getUsername();
         }
 
         final String adminMessage = requesterDisplay
-            + " requested a password reset. Generate a temporary password from Employee Details.";
+                + " requested a password reset. Generate a temporary password from Employee Details.";
         userRepository.findAll().stream()
-            .filter(account -> account.getRole() != null && account.getRole().equalsIgnoreCase("admin"))
-            .map(UserAccount::getUsername)
-            .filter(Objects::nonNull)
-            .filter(usernameValue -> !usernameValue.isBlank())
-            .forEach(adminUsername -> createNotification(
-                adminUsername,
-                "Password Reset Request",
-                adminMessage,
-                "password-reset-request"));
+                .filter(account -> account.getRole() != null && account.getRole().equalsIgnoreCase("admin"))
+                .map(UserAccount::getUsername)
+                .filter(Objects::nonNull)
+                .filter(usernameValue -> !usernameValue.isBlank())
+                .forEach(adminUsername -> createNotification(
+                        adminUsername,
+                        "Password Reset Request",
+                        adminMessage,
+                        "password-reset-request"));
 
         return ResponseEntity.ok("Password reset request submitted to admin notification queue.");
     }
@@ -267,7 +267,21 @@ public class AuthController {
         }
 
         UserAccount user = userOpt.get();
-        if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
+        String storedPassword = Optional.ofNullable(user.getPassword()).orElse("");
+        if (storedPassword.isBlank()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Temporary password is not set for this account. Contact admin.");
+        }
+
+        boolean passwordMatches;
+        try {
+            passwordMatches = passwordEncoder.matches(currentPassword, storedPassword);
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Stored password format is invalid. Please regenerate a temporary password.");
+        }
+
+        if (!passwordMatches) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Temporary password is incorrect");
         }
 
@@ -331,13 +345,13 @@ public class AuthController {
         boolean adminUser = user.getRole() != null && user.getRole().equalsIgnoreCase("admin");
 
         Optional<String> mutableValidationError = validateMutableProfileFields(
-            request.getPhoneNumber(),
-            request.getNationality(),
-            request.getBloodGroup(),
-            request.getPersonalEmail(),
-            request.getDob(),
-            request.getAddress(),
-            adminUser);
+                request.getPhoneNumber(),
+                request.getNationality(),
+                request.getBloodGroup(),
+                request.getPersonalEmail(),
+                request.getDob(),
+                request.getAddress(),
+                adminUser);
         if (mutableValidationError.isPresent()) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(mutableValidationError.get());
         }
@@ -662,7 +676,7 @@ public class AuthController {
     }
 
     @DeleteMapping("/users/{username}")
-        @Operation(summary = "Delete User", description = "Delete an employee, manager, or admin account by username (admin only). Self-delete and deleting the last admin are blocked.")
+    @Operation(summary = "Delete User", description = "Delete an employee, manager, or admin account by username (admin only). Self-delete and deleting the last admin are blocked.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "User deleted successfully", content = @Content(mediaType = "text/plain")),
             @ApiResponse(responseCode = "403", description = "Only admin users can delete accounts", content = @Content(mediaType = "text/plain")),
@@ -696,11 +710,11 @@ public class AuthController {
         UserAccount user = account.get();
         if (user.getRole() != null && user.getRole().equalsIgnoreCase("admin")) {
             long adminCount = userRepository.findAll().stream()
-                .filter(candidate -> candidate.getRole() != null && candidate.getRole().equalsIgnoreCase("admin"))
-                .count();
+                    .filter(candidate -> candidate.getRole() != null && candidate.getRole().equalsIgnoreCase("admin"))
+                    .count();
             if (adminCount <= 1) {
-            return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body("Cannot delete the last remaining admin account");
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body("Cannot delete the last remaining admin account");
             }
         }
 

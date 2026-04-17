@@ -123,45 +123,72 @@ public class LeaveApplicationController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Unable to validate leave balance for employee");
         }
 
-        LeaveApplication entity = new LeaveApplication();
-        entity.setEmployeeId(actor.getEmployeeId());
-        entity.setUsername(actor.getUsername());
-        entity.setEmailId(actor.getEmailId());
-        entity.setEmployeeName(buildDisplayName(actor));
-        entity.setLeaveType(request.getLeaveType());
-        entity.setFromDate(request.getFromDate());
-        entity.setToDate(request.getToDate());
-        entity.setDuration(request.getDuration());
-        entity.setReason(request.getReason());
-        entity.setSickAttachmentName(request.getSickAttachmentName());
-        entity.setSickAttachmentData(request.getSickAttachmentData());
-        entity.setStatus("PENDING");
-        entity.setAppliedDate(LocalDate.now().toString());
-        entity.setCreatedAt(System.currentTimeMillis());
-        entity.setUpdatedAt(System.currentTimeMillis());
+        LeaveTrackerData tracker = leaveTrackerService.recalculateLeaveTrackerForEmployee(actor);
+        int availableLeave = getAvailableLeaveForType(tracker, normalizedLeaveType);
+        int requestedDuration = safeInt(request.getDuration());
+        int primaryDuration = requestedDuration;
+        int overflowLopDuration = 0;
+
+        if ((normalizedLeaveType.equals("sick") || normalizedLeaveType.equals("casual"))
+                && requestedDuration > availableLeave) {
+            primaryDuration = Math.max(0, availableLeave);
+            overflowLopDuration = requestedDuration - primaryDuration;
+        }
 
         Optional<UserAccount> managerOpt = resolveManagerFor(actor, request);
         if (role.equals("employee") && managerOpt.isEmpty()) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Reporting manager is not mapped");
         }
 
-        managerOpt.ifPresent(manager -> {
-            entity.setReportingManagerId(manager.getEmployeeId());
-            entity.setReportingManagerUsername(manager.getUsername());
-            entity.setReportingManagerEmail(manager.getEmailId());
-            entity.setReportingManagerName(buildDisplayName(manager));
-        });
+        LeaveApplication savedPrimary = null;
+        if (primaryDuration > 0) {
+            LeaveApplication primaryEntity = buildLeaveEntity(actor, request, normalizedLeaveType, primaryDuration);
+            managerOpt.ifPresent(manager -> applyManager(primaryEntity, manager));
 
-        LeaveApplication saved = leaveApplicationRepository.save(entity);
+            savedPrimary = leaveApplicationRepository.save(primaryEntity);
 
-        managerOpt.ifPresent(manager -> createNotification(
-                manager.getUsername(),
-                "New Leave Request",
-                entity.getEmployeeName() + " submitted a " + formatLeaveType(entity.getLeaveType())
-                        + " request (" + entity.getDuration() + " day" + (entity.getDuration() > 1 ? "s" : "") + ").",
-                "leave-request-submitted"));
+            LeaveApplication notificationRef = savedPrimary;
+            managerOpt.ifPresent(manager -> createNotification(
+                    manager.getUsername(),
+                    "New Leave Request",
+                    notificationRef.getEmployeeName() + " submitted a "
+                            + formatLeaveType(notificationRef.getLeaveType())
+                            + " request (" + notificationRef.getDuration() + " day"
+                            + (notificationRef.getDuration() > 1 ? "s" : "") + ").",
+                    "leave-request-submitted"));
+        }
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+        LeaveApplication savedLop = null;
+        if (overflowLopDuration > 0) {
+            LeaveApplication lopEntity = buildLeaveEntity(actor, request, "lop", overflowLopDuration);
+            String baseReason = Optional.ofNullable(request.getReason()).orElse("").trim();
+            String reason = baseReason.isBlank()
+                    ? "Auto-created LOP due to insufficient " + normalizedLeaveType + " leave balance"
+                    : baseReason + " | Auto-created LOP for excess leave days";
+            lopEntity.setReason(reason);
+            managerOpt.ifPresent(manager -> applyManager(lopEntity, manager));
+
+            savedLop = leaveApplicationRepository.save(lopEntity);
+
+            LeaveApplication lopNotificationRef = savedLop;
+            managerOpt.ifPresent(manager -> createNotification(
+                    manager.getUsername(),
+                    "New Leave Request",
+                    lopNotificationRef.getEmployeeName() + " submitted a Loss of Pay request ("
+                            + lopNotificationRef.getDuration() + " day"
+                            + (lopNotificationRef.getDuration() > 1 ? "s" : "") + ").",
+                    "leave-request-submitted"));
+        }
+
+        if (savedPrimary != null) {
+            return ResponseEntity.status(HttpStatus.CREATED).body(savedPrimary);
+        }
+        if (savedLop != null) {
+            return ResponseEntity.status(HttpStatus.CREATED).body(savedLop);
+        }
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body("Unable to create leave request due to missing available balance");
     }
 
     @PostMapping("/auto-lop")
@@ -772,6 +799,48 @@ public class LeaveApplicationController {
 
     private String safeLower(String value) {
         return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private LeaveApplication buildLeaveEntity(UserAccount actor, LeaveApplication request, String leaveType,
+            int duration) {
+        LeaveApplication entity = new LeaveApplication();
+        entity.setEmployeeId(actor.getEmployeeId());
+        entity.setUsername(actor.getUsername());
+        entity.setEmailId(actor.getEmailId());
+        entity.setEmployeeName(buildDisplayName(actor));
+        entity.setLeaveType(leaveType);
+        entity.setFromDate(request.getFromDate());
+        entity.setToDate(request.getToDate());
+        entity.setDuration(duration);
+        entity.setReason(request.getReason());
+        entity.setSickAttachmentName(request.getSickAttachmentName());
+        entity.setSickAttachmentData(request.getSickAttachmentData());
+        entity.setStatus("PENDING");
+        entity.setAppliedDate(LocalDate.now().toString());
+        entity.setCreatedAt(System.currentTimeMillis());
+        entity.setUpdatedAt(System.currentTimeMillis());
+        return entity;
+    }
+
+    private void applyManager(LeaveApplication entity, UserAccount manager) {
+        entity.setReportingManagerId(manager.getEmployeeId());
+        entity.setReportingManagerUsername(manager.getUsername());
+        entity.setReportingManagerEmail(manager.getEmailId());
+        entity.setReportingManagerName(buildDisplayName(manager));
+    }
+
+    private int getAvailableLeaveForType(LeaveTrackerData tracker, String normalizedLeaveType) {
+        if (tracker == null) {
+            return 0;
+        }
+
+        if (normalizedLeaveType.equals("sick")) {
+            return safeInt(tracker.getSickLeaveAvailable());
+        }
+        if (normalizedLeaveType.equals("casual")) {
+            return safeInt(tracker.getCasualLeaveAvailable());
+        }
+        return Integer.MAX_VALUE;
     }
 
     private Set<String> nonEmptySetOrPlaceholder(Set<String> values) {
