@@ -352,7 +352,8 @@ public class AuthController {
                 request.getPersonalEmail(),
                 request.getDob(),
                 request.getAddress(),
-                adminUser);
+                adminUser,
+                true);
         if (mutableValidationError.isPresent()) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(mutableValidationError.get());
         }
@@ -951,7 +952,8 @@ public class AuthController {
                 request.getPersonalEmail(),
                 request.getDob(),
                 request.getAddress(),
-                request.getRole() != null && request.getRole().equalsIgnoreCase("admin"));
+                request.getRole() != null && request.getRole().equalsIgnoreCase("admin"),
+                false);
         if (mutableValidationError.isPresent()) {
             return mutableValidationError;
         }
@@ -965,9 +967,13 @@ public class AuthController {
             String personalEmail,
             String dob,
             String address,
-            boolean adminUser) {
+            boolean adminUser,
+            boolean requireMandatoryFields) {
         String normalizedPhone = normalizeBlank(phoneNumber);
-        if (normalizedPhone == null || !PHONE_PATTERN.matcher(normalizedPhone).matches()) {
+        if (requireMandatoryFields && normalizedPhone == null) {
+            return Optional.of("Phone number is required");
+        }
+        if (normalizedPhone != null && !PHONE_PATTERN.matcher(normalizedPhone).matches()) {
             return Optional.of("Phone number must be in +91XXXXXXXXXX format and start with 6-9");
         }
 
@@ -993,44 +999,46 @@ public class AuthController {
 
         if (!adminUser) {
             String normalizedDob = normalizeBlank(dob);
-            if (normalizedDob == null) {
+            if (requireMandatoryFields && normalizedDob == null) {
                 return Optional.of("Date of birth is required");
             }
 
-            LocalDate dobDate;
-            try {
-                dobDate = LocalDate.parse(normalizedDob);
-            } catch (DateTimeParseException ex) {
+            if (normalizedDob != null) {
+                LocalDate dobDate;
                 try {
-                    dobDate = LocalDate.parse(normalizedDob, DateTimeFormatter.ofPattern("dd/MM/yyyy"));
-                } catch (DateTimeParseException ex2) {
+                    dobDate = LocalDate.parse(normalizedDob);
+                } catch (DateTimeParseException ex) {
                     try {
-                        dobDate = LocalDate.parse(normalizedDob, DateTimeFormatter.ofPattern("dd-MM-yyyy"));
-                    } catch (DateTimeParseException ex3) {
-                        return Optional.of("Date of birth must be in yyyy-MM-dd format");
+                        dobDate = LocalDate.parse(normalizedDob, DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+                    } catch (DateTimeParseException ex2) {
+                        try {
+                            dobDate = LocalDate.parse(normalizedDob, DateTimeFormatter.ofPattern("dd-MM-yyyy"));
+                        } catch (DateTimeParseException ex3) {
+                            return Optional.of("Date of birth must be in yyyy-MM-dd format");
+                        }
                     }
+                }
+
+                LocalDate today = LocalDate.now();
+                if (!dobDate.isBefore(today)) {
+                    return Optional.of("Date of birth cannot be today or in the future");
+                }
+
+                int age = today.getYear() - dobDate.getYear();
+                if (dobDate.plusYears(age).isAfter(today)) {
+                    age -= 1;
+                }
+
+                if (age < 18 || age > 60) {
+                    return Optional.of("Employee age must be between 18 and 60 years");
                 }
             }
 
-            LocalDate today = LocalDate.now();
-            if (!dobDate.isBefore(today)) {
-                return Optional.of("Date of birth cannot be today or in the future");
-            }
-
-            int age = today.getYear() - dobDate.getYear();
-            if (dobDate.plusYears(age).isAfter(today)) {
-                age -= 1;
-            }
-
-            if (age < 18 || age > 60) {
-                return Optional.of("Employee age must be between 18 and 60 years");
-            }
-
             String normalizedAddress = normalizeBlank(address);
-            if (normalizedAddress == null) {
+            if (requireMandatoryFields && normalizedAddress == null) {
                 return Optional.of("Address is required");
             }
-            if (!ADDRESS_PATTERN.matcher(normalizedAddress).matches()) {
+            if (normalizedAddress != null && !ADDRESS_PATTERN.matcher(normalizedAddress).matches()) {
                 return Optional.of("Address contains unsupported characters");
             }
         }
