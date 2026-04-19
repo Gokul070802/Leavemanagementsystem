@@ -409,14 +409,19 @@
             .then(response => {
                 if (response.ok) {
                     const createdRole = selectedRole === 'manager' ? 'Manager' : 'Employee';
-                    notify(`${createdRole} added successfully!`, 'success');
-                    window.location.href = 'employee-details.html';
+                    const firstName = document.getElementById('firstName').value.trim();
+                    const lastName  = document.getElementById('lastName').value.trim();
+                    const fullName  = [firstName, lastName].filter(Boolean).join(' ');
+                    notify(`${createdRole}${fullName ? ' ' + fullName : ''} added successfully!`, 'success', { timeoutMs: 2200 });
+                    document.getElementById('saveEmployeeBtn').disabled = true;
+                    setTimeout(() => { window.location.href = 'employee-details.html'; }, 2000);
                 } else {
                     return response.text().then(text => { throw new Error(text); });
                 }
             })
             .catch(error => {
-                notify('Error adding employee: ' + error.message, 'error');
+                const createdRole = selectedRole === 'manager' ? 'manager' : 'employee';
+                notify(`Error adding ${createdRole}: ` + error.message, 'error');
             });
         }
 
