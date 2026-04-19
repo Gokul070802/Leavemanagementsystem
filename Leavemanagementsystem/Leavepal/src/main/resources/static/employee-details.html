@@ -103,7 +103,7 @@
                             <span class="info-label">DEPARTMENT</span>
                             <span class="info-value" id="profileDepartment">—</span>
                         </div>
-                        <div class="info-item profile-details-full-width" id="profileReportingRow">
+                        <div class="info-item" id="profileReportingRow">
                             <span class="info-label">REPORTING TO</span>
                             <span class="info-value" id="profileReporting">—</span>
                         </div>
@@ -205,7 +205,11 @@
             const role = String(user.role || '').toLowerCase();
             const profileReportingRow = document.getElementById('profileReportingRow');
             if (profileReportingRow) {
-                profileReportingRow.style.display = role === 'manager' ? 'none' : 'block';
+                if (role === 'manager') {
+                    profileReportingRow.style.display = 'none';
+                } else {
+                    profileReportingRow.style.removeProperty('display');
+                }
             }
 
             const dashboardLink = document.getElementById('dashboardLink');
