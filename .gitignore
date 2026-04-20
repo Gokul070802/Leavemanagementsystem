@@ -18,3 +18,13 @@ gcp-run-env.yaml
 deploy-gcp.ps1
 
 .github/java-upgrade/
+
+# One-time migration / utility scripts
+RunMigration.java
+migration.sql
+grants.sql
+*.bat
+cloud-sql-proxy.exe
+cp.txt
+db_password_no_newline.txt
+app-test*.log
