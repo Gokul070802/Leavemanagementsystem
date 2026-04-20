@@ -1,13 +1,14 @@
-name: CI-CD Cloud Run
+name: CI-CD Cloud Run (DISABLED - use manual deployment)
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - Leavemanagementsystem/**
-      - .github/workflows/ci-cd-gcp-cloud-run.yml
   workflow_dispatch:
+  # Disabled: push trigger removed due to credential issues
+  # push:
+  #   branches:
+  #     - main
+  #   paths:
+  #     - Leavemanagementsystem/**
+  #     - .github/workflows/ci-cd-gcp-cloud-run.yml
 
 permissions:
   contents: read
