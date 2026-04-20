@@ -73,6 +73,21 @@ jobs:
           REGION: ${{ secrets.GCP_REGION }}
           REPOSITORY: ${{ secrets.GCP_ARTIFACT_REPO }}
         run: |
+          # Use secret if valid; otherwise fall back to the known working repository.
+          REPOSITORY="${REPOSITORY:-leave-management}"
+
+          if ! gcloud artifacts repositories describe "$REPOSITORY" --location "$REGION" --project "$PROJECT_ID" >/dev/null 2>&1; then
+            if gcloud artifacts repositories describe "leave-management" --location "$REGION" --project "$PROJECT_ID" >/dev/null 2>&1; then
+              echo "Configured repository '$REPOSITORY' not found. Falling back to 'leave-management'."
+              REPOSITORY="leave-management"
+            else
+              echo "Artifact Registry repository '$REPOSITORY' was not found in region '$REGION'."
+              echo "Set GCP_ARTIFACT_REPO to an existing repository or create one first."
+              gcloud artifacts repositories list --project "$PROJECT_ID" --location "$REGION" --format="table(name,format,location)"
+              exit 1
+            fi
+          fi
+
           IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/leave-management-app:manual-${{ github.run_number }}"
           docker build -t "$IMAGE" .
           docker push "$IMAGE"
