@@ -23,6 +23,7 @@ import org.kumaran.dto.UserResponse;
 import org.kumaran.entity.AppNotification;
 import org.kumaran.entity.UserAccount;
 import org.kumaran.repository.AppNotificationRepository;
+import org.kumaran.repository.LeaveApplicationRepository;
 import org.kumaran.repository.LeaveTrackerRepository;
 import org.kumaran.repository.UserAccountRepository;
 import org.kumaran.security.JwtRequestHelper;
@@ -30,6 +31,7 @@ import org.kumaran.service.LeaveTrackerService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -55,6 +57,7 @@ import jakarta.servlet.http.HttpServletRequest;
 public class AuthController {
     private final UserAccountRepository userRepository;
     private final LeaveTrackerRepository leaveTrackerRepository;
+    private final LeaveApplicationRepository leaveApplicationRepository;
     private final LeaveTrackerService leaveTrackerService;
     private final AppNotificationRepository appNotificationRepository;
     private final JwtRequestHelper jwtHelper;
@@ -69,12 +72,14 @@ public class AuthController {
 
     public AuthController(UserAccountRepository userRepository,
             LeaveTrackerRepository leaveTrackerRepository,
+            LeaveApplicationRepository leaveApplicationRepository,
             LeaveTrackerService leaveTrackerService,
             AppNotificationRepository appNotificationRepository,
             JwtRequestHelper jwtHelper,
             PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.leaveTrackerRepository = leaveTrackerRepository;
+        this.leaveApplicationRepository = leaveApplicationRepository;
         this.leaveTrackerService = leaveTrackerService;
         this.appNotificationRepository = appNotificationRepository;
         this.jwtHelper = jwtHelper;
@@ -677,6 +682,7 @@ public class AuthController {
         return ResponseEntity.ok(subordinates);
     }
 
+    @Transactional
     @DeleteMapping("/users/{username}")
     @Operation(summary = "Delete User", description = "Delete an employee, manager, or admin account by username (admin only). Self-delete and deleting the last admin are blocked.")
     @ApiResponses(value = {
@@ -738,8 +744,24 @@ public class AuthController {
             }
         }
 
-        if (user.getEmployeeId() != null && !user.getEmployeeId().isBlank()) {
-            leaveTrackerRepository.findByEmployeeId(user.getEmployeeId())
+        String deletedUsername = user.getUsername();
+        String deletedEmployeeId = user.getEmployeeId() != null ? user.getEmployeeId() : "";
+
+        // Delete all leave applications linked to this user (by username, email, or
+        // employeeId)
+        leaveApplicationRepository.deleteAllByUsernameOrEmployeeId(deletedUsername, deletedEmployeeId);
+
+        // Delete all notifications sent to this user
+        appNotificationRepository.deleteByRecipientUsername(deletedUsername);
+
+        // Delete the email address variant too in case emailId differs from username
+        if (user.getEmailId() != null && !user.getEmailId().equalsIgnoreCase(deletedUsername)) {
+            appNotificationRepository.deleteByRecipientUsername(user.getEmailId());
+        }
+
+        // Delete leave tracker record
+        if (!deletedEmployeeId.isBlank()) {
+            leaveTrackerRepository.findByEmployeeId(deletedEmployeeId)
                     .ifPresent(leaveTrackerRepository::delete);
         }
 
