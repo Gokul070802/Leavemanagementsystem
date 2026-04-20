@@ -1,17 +1,17 @@
 package org.kumaran.service;
 
-import org.kumaran.entity.LeaveTrackerData;
-import org.kumaran.entity.UserAccount;
-import org.kumaran.entity.LeaveApplication;
-import org.kumaran.repository.LeaveApplicationRepository;
-import org.kumaran.repository.LeaveTrackerRepository;
-import org.kumaran.repository.UserAccountRepository;
-import org.springframework.stereotype.Service;
-
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.Optional;
+
+import org.kumaran.entity.LeaveApplication;
+import org.kumaran.entity.LeaveTrackerData;
+import org.kumaran.entity.UserAccount;
+import org.kumaran.repository.LeaveApplicationRepository;
+import org.kumaran.repository.LeaveTrackerRepository;
+import org.kumaran.repository.UserAccountRepository;
+import org.springframework.stereotype.Service;
 
 @Service
 public class LeaveTrackerService {
@@ -20,8 +20,8 @@ public class LeaveTrackerService {
     private final LeaveApplicationRepository leaveApplicationRepository;
 
     public LeaveTrackerService(LeaveTrackerRepository leaveTrackerRepository,
-                               UserAccountRepository userRepository,
-                               LeaveApplicationRepository leaveApplicationRepository) {
+            UserAccountRepository userRepository,
+            LeaveApplicationRepository leaveApplicationRepository) {
         this.leaveTrackerRepository = leaveTrackerRepository;
         this.userRepository = userRepository;
         this.leaveApplicationRepository = leaveApplicationRepository;
@@ -133,7 +133,8 @@ public class LeaveTrackerService {
     /**
      * Create or update leave tracker for an employee
      */
-    public LeaveTrackerData syncLeaveTrackerForEmployee(UserAccount employee, int sickLeaveBooked, int casualLeaveBooked, int lopBooked) {
+    public LeaveTrackerData syncLeaveTrackerForEmployee(UserAccount employee, double sickLeaveBooked,
+            double casualLeaveBooked, double lopBooked) {
         int totalEntitlement = calculateTotalEntitlement(employee.getJoining());
 
         Optional<LeaveTrackerData> existing = leaveTrackerRepository.findByEmployeeId(employee.getEmployeeId());
@@ -143,7 +144,7 @@ public class LeaveTrackerService {
             tracker = existing.get();
         } else {
             String employeeName = ((employee.getFirstName() != null ? employee.getFirstName() : "") + " " +
-                                  (employee.getLastName() != null ? employee.getLastName() : "")).trim();
+                    (employee.getLastName() != null ? employee.getLastName() : "")).trim();
             if (employeeName.isEmpty()) {
                 employeeName = "Unknown Employee";
             }
@@ -152,13 +153,12 @@ public class LeaveTrackerService {
                     employeeName,
                     employee.getRole(),
                     employee.getDepartment(),
-                    employee.getJoining()
-            );
+                    employee.getJoining());
         }
 
-        tracker.setSickLeaveAvailable(Math.max(0, totalEntitlement - sickLeaveBooked));
-        tracker.setCasualLeaveAvailable(Math.max(0, totalEntitlement - casualLeaveBooked));
-        tracker.setLossOfPayAvailable(0);
+        tracker.setSickLeaveAvailable(Math.max(0.0, totalEntitlement - sickLeaveBooked));
+        tracker.setCasualLeaveAvailable(Math.max(0.0, totalEntitlement - casualLeaveBooked));
+        tracker.setLossOfPayAvailable(0.0);
         tracker.setSickLeaveBooked(sickLeaveBooked);
         tracker.setCasualLeaveBooked(casualLeaveBooked);
         tracker.setLossOfPayBooked(lopBooked);
@@ -167,7 +167,7 @@ public class LeaveTrackerService {
     }
 
     /**
-         * Sync all workforce leave tracker data (employees and managers)
+     * Sync all workforce leave tracker data (employees and managers)
      */
     public void syncAllEmployeeLeaveTrackers() {
         List<UserAccount> employees = userRepository.findByRoleIgnoreCaseIn(List.of("employee", "manager"));
@@ -207,32 +207,31 @@ public class LeaveTrackerService {
         }
 
         int totalEntitlement = calculateTotalEntitlement(employee.getJoining());
-        int sickBooked = 0;
-        int casualBooked = 0;
-        int lopBooked = 0;
+        double sickBooked = 0.0;
+        double casualBooked = 0.0;
+        double lopBooked = 0.0;
 
         List<LeaveApplication> applications = leaveApplicationRepository
-            .findByIdentityAndStatusOrderByCreatedAtAsc(
-                employee.getEmployeeId(),
-                employee.getUsername(),
-                employee.getEmailId(),
-                "APPROVED"
-            );
+                .findByIdentityAndStatusOrderByCreatedAtAsc(
+                        employee.getEmployeeId(),
+                        employee.getUsername(),
+                        employee.getEmailId(),
+                        "APPROVED");
 
         for (LeaveApplication app : applications) {
-            int duration = app.getDuration() == null ? 0 : app.getDuration();
+            double duration = app.getDuration() == null ? 0.0 : app.getDuration();
             String leaveType = app.getLeaveType() == null ? "" : app.getLeaveType().trim().toLowerCase();
 
             if (leaveType.equals("lop")) {
                 lopBooked += duration;
             } else if (leaveType.equals("sick")) {
-                int available = Math.max(0, totalEntitlement - sickBooked);
-                int used = Math.min(duration, available);
+                double available = Math.max(0.0, totalEntitlement - sickBooked);
+                double used = Math.min(duration, available);
                 sickBooked += used;
                 lopBooked += duration - used;
             } else if (leaveType.equals("casual")) {
-                int available = Math.max(0, totalEntitlement - casualBooked);
-                int used = Math.min(duration, available);
+                double available = Math.max(0.0, totalEntitlement - casualBooked);
+                double used = Math.min(duration, available);
                 casualBooked += used;
                 lopBooked += duration - used;
             }
@@ -248,4 +247,3 @@ public class LeaveTrackerService {
         return recalculateLeaveTrackerForEmployee(employee);
     }
 }
-

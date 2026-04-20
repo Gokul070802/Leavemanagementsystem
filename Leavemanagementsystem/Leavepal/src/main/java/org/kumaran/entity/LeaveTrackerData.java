@@ -1,7 +1,12 @@
 package org.kumaran.entity;
 
-import jakarta.persistence.*;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
 
 @Entity
 @Table(name = "leave_tracker")
@@ -28,29 +33,29 @@ public class LeaveTrackerData {
     @Schema(description = "Date of joining", example = "2024-12-01")
     private String joiningDate;
 
-    @Column(nullable = false)
-    @Schema(description = "Sick leave available in current cycle", example = "4")
-    private Integer sickLeaveAvailable = 0;
+    @Column(nullable = false, columnDefinition = "NUMERIC(4,1)")
+    @Schema(description = "Sick leave available in current cycle", example = "4.0")
+    private Double sickLeaveAvailable = 0.0;
 
-    @Column(nullable = false)
-    @Schema(description = "Casual leave available in current cycle", example = "4")
-    private Integer casualLeaveAvailable = 0;
+    @Column(nullable = false, columnDefinition = "NUMERIC(4,1)")
+    @Schema(description = "Casual leave available in current cycle", example = "4.0")
+    private Double casualLeaveAvailable = 0.0;
 
-    @Column(nullable = false)
-    @Schema(description = "Loss of pay available", example = "0")
-    private Integer lossOfPayAvailable = 0;
+    @Column(nullable = false, columnDefinition = "NUMERIC(4,1)")
+    @Schema(description = "Loss of pay available", example = "0.0")
+    private Double lossOfPayAvailable = 0.0;
 
-    @Column(nullable = false)
-    @Schema(description = "Sick leave booked", example = "0")
-    private Integer sickLeaveBooked = 0;
+    @Column(nullable = false, columnDefinition = "NUMERIC(4,1)")
+    @Schema(description = "Sick leave booked", example = "0.0")
+    private Double sickLeaveBooked = 0.0;
 
-    @Column(nullable = false)
-    @Schema(description = "Casual leave booked", example = "0")
-    private Integer casualLeaveBooked = 0;
+    @Column(nullable = false, columnDefinition = "NUMERIC(4,1)")
+    @Schema(description = "Casual leave booked", example = "0.0")
+    private Double casualLeaveBooked = 0.0;
 
-    @Column(nullable = false)
-    @Schema(description = "Loss of pay booked", example = "0")
-    private Integer lossOfPayBooked = 0;
+    @Column(nullable = false, columnDefinition = "NUMERIC(4,1)")
+    @Schema(description = "Loss of pay booked", example = "0.0")
+    private Double lossOfPayBooked = 0.0;
 
     @Column(nullable = false, updatable = false)
     @Schema(description = "Created timestamp")
@@ -64,7 +69,8 @@ public class LeaveTrackerData {
     public LeaveTrackerData() {
     }
 
-    public LeaveTrackerData(String employeeId, String employeeName, String role, String department, String joiningDate) {
+    public LeaveTrackerData(String employeeId, String employeeName, String role, String department,
+            String joiningDate) {
         this.employeeId = employeeId;
         this.employeeName = employeeName;
         this.role = role;
@@ -121,56 +127,56 @@ public class LeaveTrackerData {
         this.joiningDate = joiningDate;
     }
 
-    public Integer getSickLeaveAvailable() {
+    public Double getSickLeaveAvailable() {
         return sickLeaveAvailable;
     }
 
-    public void setSickLeaveAvailable(Integer sickLeaveAvailable) {
+    public void setSickLeaveAvailable(Double sickLeaveAvailable) {
         this.sickLeaveAvailable = sickLeaveAvailable;
         this.updatedAt = System.currentTimeMillis();
     }
 
-    public Integer getCasualLeaveAvailable() {
+    public Double getCasualLeaveAvailable() {
         return casualLeaveAvailable;
     }
 
-    public void setCasualLeaveAvailable(Integer casualLeaveAvailable) {
+    public void setCasualLeaveAvailable(Double casualLeaveAvailable) {
         this.casualLeaveAvailable = casualLeaveAvailable;
         this.updatedAt = System.currentTimeMillis();
     }
 
-    public Integer getLossOfPayAvailable() {
+    public Double getLossOfPayAvailable() {
         return lossOfPayAvailable;
     }
 
-    public void setLossOfPayAvailable(Integer lossOfPayAvailable) {
+    public void setLossOfPayAvailable(Double lossOfPayAvailable) {
         this.lossOfPayAvailable = lossOfPayAvailable;
         this.updatedAt = System.currentTimeMillis();
     }
 
-    public Integer getSickLeaveBooked() {
+    public Double getSickLeaveBooked() {
         return sickLeaveBooked;
     }
 
-    public void setSickLeaveBooked(Integer sickLeaveBooked) {
+    public void setSickLeaveBooked(Double sickLeaveBooked) {
         this.sickLeaveBooked = sickLeaveBooked;
         this.updatedAt = System.currentTimeMillis();
     }
 
-    public Integer getCasualLeaveBooked() {
+    public Double getCasualLeaveBooked() {
         return casualLeaveBooked;
     }
 
-    public void setCasualLeaveBooked(Integer casualLeaveBooked) {
+    public void setCasualLeaveBooked(Double casualLeaveBooked) {
         this.casualLeaveBooked = casualLeaveBooked;
         this.updatedAt = System.currentTimeMillis();
     }
 
-    public Integer getLossOfPayBooked() {
+    public Double getLossOfPayBooked() {
         return lossOfPayBooked;
     }
 
-    public void setLossOfPayBooked(Integer lossOfPayBooked) {
+    public void setLossOfPayBooked(Double lossOfPayBooked) {
         this.lossOfPayBooked = lossOfPayBooked;
         this.updatedAt = System.currentTimeMillis();
     }
@@ -191,5 +197,3 @@ public class LeaveTrackerData {
         this.updatedAt = updatedAt;
     }
 }
-
-

@@ -91,7 +91,7 @@ public class LeaveApplicationController {
         if (request.getLeaveType() == null || request.getLeaveType().isBlank()
                 || request.getFromDate() == null || request.getFromDate().isBlank()
                 || request.getToDate() == null || request.getToDate().isBlank()
-                || request.getDuration() == null || request.getDuration() <= 0) {
+                || request.getDuration() == null || request.getDuration() <= 0.0) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Invalid leave payload");
         }
 
@@ -124,14 +124,14 @@ public class LeaveApplicationController {
         }
 
         LeaveTrackerData tracker = leaveTrackerService.recalculateLeaveTrackerForEmployee(actor);
-        int availableLeave = getAvailableLeaveForType(tracker, normalizedLeaveType);
-        int requestedDuration = safeInt(request.getDuration());
-        int primaryDuration = requestedDuration;
-        int overflowLopDuration = 0;
+        double availableLeave = getAvailableLeaveForType(tracker, normalizedLeaveType);
+        double requestedDuration = safeDouble(request.getDuration());
+        double primaryDuration = requestedDuration;
+        double overflowLopDuration = 0.0;
 
         if ((normalizedLeaveType.equals("sick") || normalizedLeaveType.equals("casual"))
                 && requestedDuration > availableLeave) {
-            primaryDuration = Math.max(0, availableLeave);
+            primaryDuration = Math.max(0.0, availableLeave);
             overflowLopDuration = requestedDuration - primaryDuration;
         }
 
@@ -154,7 +154,8 @@ public class LeaveApplicationController {
                     notificationRef.getEmployeeName() + " submitted a "
                             + formatLeaveType(notificationRef.getLeaveType())
                             + " request (" + notificationRef.getDuration() + " day"
-                            + (notificationRef.getDuration() > 1 ? "s" : "") + ").",
+                            + (notificationRef.getDuration() != null && notificationRef.getDuration() > 1.0 ? "s" : "")
+                            + ").",
                     "leave-request-submitted"));
         }
 
@@ -176,7 +177,9 @@ public class LeaveApplicationController {
                     "New Leave Request",
                     lopNotificationRef.getEmployeeName() + " submitted a Loss of Pay request ("
                             + lopNotificationRef.getDuration() + " day"
-                            + (lopNotificationRef.getDuration() > 1 ? "s" : "") + ").",
+                            + (lopNotificationRef.getDuration() != null && lopNotificationRef.getDuration() > 1.0 ? "s"
+                                    : "")
+                            + ").",
                     "leave-request-submitted"));
         }
 
@@ -236,7 +239,7 @@ public class LeaveApplicationController {
         lopEntity.setLeaveType("lop");
         lopEntity.setFromDate(fromDateStr);
         lopEntity.setToDate(toDateStr);
-        lopEntity.setDuration((int) lopDays);
+        lopEntity.setDuration(lopDays);
         lopEntity.setReason(reason);
         lopEntity.setStatus("PENDING");
         lopEntity.setAppliedDate(LocalDate.now().toString());
@@ -263,7 +266,7 @@ public class LeaveApplicationController {
                 manager.getUsername(),
                 "New Leave Request",
                 lopEntity.getEmployeeName() + " submitted a Loss of Pay request (" + lopEntity.getDuration() + " day"
-                        + (lopEntity.getDuration() > 1 ? "s" : "") + ").",
+                        + (lopEntity.getDuration() != null && lopEntity.getDuration() > 1.0 ? "s" : "") + ").",
                 "leave-request-submitted"));
 
         return ResponseEntity.status(HttpStatus.CREATED).body(saved);
@@ -802,7 +805,7 @@ public class LeaveApplicationController {
     }
 
     private LeaveApplication buildLeaveEntity(UserAccount actor, LeaveApplication request, String leaveType,
-            int duration) {
+            double duration) {
         LeaveApplication entity = new LeaveApplication();
         entity.setEmployeeId(actor.getEmployeeId());
         entity.setUsername(actor.getUsername());
@@ -829,18 +832,18 @@ public class LeaveApplicationController {
         entity.setReportingManagerName(buildDisplayName(manager));
     }
 
-    private int getAvailableLeaveForType(LeaveTrackerData tracker, String normalizedLeaveType) {
+    private double getAvailableLeaveForType(LeaveTrackerData tracker, String normalizedLeaveType) {
         if (tracker == null) {
-            return 0;
+            return 0.0;
         }
 
         if (normalizedLeaveType.equals("sick")) {
-            return safeInt(tracker.getSickLeaveAvailable());
+            return safeDouble(tracker.getSickLeaveAvailable());
         }
         if (normalizedLeaveType.equals("casual")) {
-            return safeInt(tracker.getCasualLeaveAvailable());
+            return safeDouble(tracker.getCasualLeaveAvailable());
         }
-        return Integer.MAX_VALUE;
+        return Double.MAX_VALUE;
     }
 
     private Set<String> nonEmptySetOrPlaceholder(Set<String> values) {
@@ -898,8 +901,8 @@ public class LeaveApplicationController {
         }
     }
 
-    private int safeInt(Integer value) {
-        return value == null ? 0 : value;
+    private double safeDouble(Double value) {
+        return value == null ? 0.0 : value;
     }
 
     private record AttachmentPayload(String contentType, byte[] bytes) {

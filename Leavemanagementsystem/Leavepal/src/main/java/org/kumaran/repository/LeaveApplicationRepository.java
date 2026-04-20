@@ -5,20 +5,22 @@ import java.util.List;
 
 import org.kumaran.entity.LeaveApplication;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 @Repository
 public interface LeaveApplicationRepository extends JpaRepository<LeaveApplication, Long> {
     List<LeaveApplication> findByEmployeeIdOrUsernameOrEmailIdOrderByCreatedAtDesc(String employeeId, String username,
             String emailId);
 
-    @org.springframework.data.jpa.repository.Modifying
-    @org.springframework.transaction.annotation.Transactional
-    @org.springframework.data.jpa.repository.Query("delete from LeaveApplication la where la.username = :username or la.emailId = :username or la.employeeId = :employeeId")
-    void deleteAllByUsernameOrEmployeeId(@org.springframework.data.repository.query.Param("username") String username,
-            @org.springframework.data.repository.query.Param("employeeId") String employeeId);
+    @Modifying
+    @Transactional
+    @Query("delete from LeaveApplication la where la.username = :username or la.emailId = :username or la.employeeId = :employeeId")
+    void deleteAllByUsernameOrEmployeeId(@Param("username") String username,
+            @Param("employeeId") String employeeId);
 
     @Query("""
             select la

@@ -62,9 +62,9 @@ public class LeaveApplication {
     @Schema(description = "Leave end date", example = "2026-04-21")
     private String toDate;
 
-    @Column(nullable = false)
-    @Schema(description = "Requested days", example = "2")
-    private Integer duration;
+    @Column(nullable = false, columnDefinition = "NUMERIC(4,1)")
+    @Schema(description = "Requested days (supports 0.5 for half day)", example = "1.0")
+    private Double duration;
 
     @Schema(description = "Reason entered by requester", example = "Family function")
     private String reason;
@@ -204,11 +204,11 @@ public class LeaveApplication {
         this.toDate = toDate;
     }
 
-    public Integer getDuration() {
+    public Double getDuration() {
         return duration;
     }
 
-    public void setDuration(Integer duration) {
+    public void setDuration(Double duration) {
         this.duration = duration;
     }
 
