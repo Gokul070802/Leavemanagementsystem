@@ -1,5 +1,7 @@
 # Leave Management System
 
+> **Deployment**: Cloud Run (asia-south1) with Cloud SQL (asia-south1:leavepal-db)
+
 This module now keeps only the core application files for the Spring Boot backend and the source frontend.
 
 ## Structure
