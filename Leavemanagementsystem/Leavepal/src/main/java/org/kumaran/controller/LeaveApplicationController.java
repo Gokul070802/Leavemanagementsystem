@@ -49,6 +49,9 @@ import jakarta.servlet.http.HttpServletRequest;
 @RequestMapping("/api/leave-applications")
 @Tag(name = "Leave Applications", description = "APIs for applying leave, manager/admin review workflow, and medical attachment access")
 public class LeaveApplicationController {
+    private static final LocalDate LEAVE_CYCLE_START = LocalDate.of(2026, 4, 1);
+    private static final LocalDate LEAVE_CYCLE_END = LocalDate.of(2027, 3, 31);
+
     private final LeaveApplicationRepository leaveApplicationRepository;
     private final UserAccountRepository userRepository;
     private final AppNotificationRepository appNotificationRepository;
@@ -236,6 +239,11 @@ public class LeaveApplicationController {
         if (fromDateStr.isEmpty() || toDateStr.isEmpty() || lopDays <= 0) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body("From date, to date, and positive duration are required for LOP");
+        }
+
+        Optional<String> leaveDateError = validateLeaveDateWindow("lop", fromDateStr, toDateStr);
+        if (leaveDateError.isPresent()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(leaveDateError.get());
         }
 
         LeaveApplication lopEntity = new LeaveApplication();
@@ -878,6 +886,13 @@ public class LeaveApplicationController {
 
             if (fromDate.isAfter(toDate)) {
                 return Optional.of("From date cannot be after to date");
+            }
+
+            if (fromDate.isBefore(LEAVE_CYCLE_START)
+                    || toDate.isBefore(LEAVE_CYCLE_START)
+                    || fromDate.isAfter(LEAVE_CYCLE_END)
+                    || toDate.isAfter(LEAVE_CYCLE_END)) {
+                return Optional.of("Leave dates must be between 2026-04-01 and 2027-03-31");
             }
 
             LocalDate today = LocalDate.now();

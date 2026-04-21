@@ -194,6 +194,9 @@
     <script src="api-config.js"></script>
     <script src="selenium-hooks.js"></script>
     <script>
+        const LEAVE_CYCLE_START = '2026-04-01';
+        const LEAVE_CYCLE_END = '2027-03-31';
+
         document.addEventListener('DOMContentLoaded', async function() {
             const currentUser = JSON.parse(localStorage.getItem('loggedInUser')) || null;
             if (!currentUser || !currentUser.role || currentUser.role === 'guest') {
@@ -383,18 +386,38 @@
                 }
             };
 
-            let min = '';
-            let max = '';
+            const laterIso = (left, right) => {
+                if (!left) {
+                    return right;
+                }
+                if (!right) {
+                    return left;
+                }
+                return left > right ? left : right;
+            };
+
+            const earlierIso = (left, right) => {
+                if (!left) {
+                    return right;
+                }
+                if (!right) {
+                    return left;
+                }
+                return left < right ? left : right;
+            };
+
+            let min = LEAVE_CYCLE_START;
+            let max = LEAVE_CYCLE_END;
 
             if (leaveType === 'sick') {
                 const earliest = new Date(today);
                 earliest.setDate(earliest.getDate() - 7);
                 const latest = new Date(today);
                 latest.setDate(latest.getDate() + 1);
-                min = toIso(earliest);
-                max = toIso(latest);
+                min = laterIso(min, toIso(earliest));
+                max = earlierIso(max, toIso(latest));
             } else if (leaveType === 'casual') {
-                min = toIso(today);
+                min = laterIso(min, toIso(today));
             }
 
             if (min) {
@@ -415,6 +438,44 @@
 
             clampValue(fromInput, min, max);
             clampValue(toInput, min, max);
+        }
+
+        function validateLeaveDateRangeClient(leaveType, fromDate, toDate) {
+            if (!fromDate || !toDate) {
+                return 'Please select both from and to dates.';
+            }
+
+            if (fromDate > toDate) {
+                return 'From date cannot be after to date.';
+            }
+
+            if (fromDate < LEAVE_CYCLE_START || toDate < LEAVE_CYCLE_START
+                || fromDate > LEAVE_CYCLE_END || toDate > LEAVE_CYCLE_END) {
+                return 'Leave dates must be between 2026-04-01 and 2027-03-31.';
+            }
+
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const todayIso = today.toISOString().slice(0, 10);
+
+            if (leaveType === 'sick') {
+                const earliest = new Date(today);
+                earliest.setDate(earliest.getDate() - 7);
+                const latest = new Date(today);
+                latest.setDate(latest.getDate() + 1);
+                const earliestIso = earliest.toISOString().slice(0, 10);
+                const latestIso = latest.toISOString().slice(0, 10);
+
+                if (fromDate < earliestIso || toDate < earliestIso || fromDate > latestIso || toDate > latestIso) {
+                    return 'Sick leave can only be applied for up to 7 days in the past, today, or next day.';
+                }
+            }
+
+            if (leaveType === 'casual' && (fromDate < todayIso || toDate < todayIso)) {
+                return 'Casual leave can only be applied for today or future dates.';
+            }
+
+            return '';
         }
 
         function toggleSickAttachmentRequirement() {
@@ -535,6 +596,12 @@
 
             if (!leaveType || duration <= 0 || !fromDate || !toDate) {
                 notify('Please select valid leave dates and type before submitting.', 'warning');
+                return;
+            }
+
+            const leaveDateError = validateLeaveDateRangeClient(leaveType, fromDate, toDate);
+            if (leaveDateError) {
+                notify(leaveDateError, 'warning');
                 return;
             }
 
