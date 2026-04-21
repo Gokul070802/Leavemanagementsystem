@@ -138,7 +138,9 @@ public class LeaveTrackerService {
      */
     public LeaveTrackerData syncLeaveTrackerForEmployee(UserAccount employee, double sickLeaveBooked,
             double casualLeaveBooked, double lopBooked) {
-        double totalEntitlement = calculateTotalEntitlement(employee.getJoining());
+        int cycleStartYear = getCycleStartYear(LocalDate.now());
+        double totalEntitlement = calculateCycleAccrual(employee.getJoining());
+        String cycleLabel = getCycleLabel(cycleStartYear);
 
         sickLeaveBooked = normalizeLeaveUnits(sickLeaveBooked);
         casualLeaveBooked = normalizeLeaveUnits(casualLeaveBooked);
@@ -169,6 +171,7 @@ public class LeaveTrackerService {
         tracker.setSickLeaveBooked(sickLeaveBooked);
         tracker.setCasualLeaveBooked(casualLeaveBooked);
         tracker.setLossOfPayBooked(lopBooked);
+        tracker.setCycleLabel(cycleLabel);
 
         return leaveTrackerRepository.save(tracker);
     }
@@ -208,22 +211,50 @@ public class LeaveTrackerService {
         return recalculateLeaveTrackerForEmployee(employee.get());
     }
 
+    /**
+     * Returns the April-March cycle label string for a given cycle start year,
+     * e.g. getCycleLabel(2026) → "Apr 2026 – Mar 2027".
+     */
+    public String getCycleLabel(int cycleStartYear) {
+        return "Apr " + cycleStartYear + " – Mar " + (cycleStartYear + 1);
+    }
+
+    /**
+     * Returns the ISO date string for the first day of the cycle (April 1).
+     */
+    private String getCycleStartDate(int cycleStartYear) {
+        return cycleStartYear + "-04-01";
+    }
+
+    /**
+     * Returns the ISO date string for the last day of the cycle (March 31).
+     */
+    private String getCycleEndDate(int cycleStartYear) {
+        return (cycleStartYear + 1) + "-03-31";
+    }
+
     public LeaveTrackerData recalculateLeaveTrackerForEmployee(UserAccount employee) {
         if (employee == null || employee.getEmployeeId() == null) {
             return null;
         }
 
-        double totalEntitlement = calculateTotalEntitlement(employee.getJoining());
+        int cycleStartYear = getCycleStartYear(LocalDate.now());
+        double totalEntitlement = calculateCycleAccrual(employee.getJoining());
         double sickBooked = 0.0;
         double casualBooked = 0.0;
         double lopBooked = 0.0;
 
+        String cycleStart = getCycleStartDate(cycleStartYear);
+        String cycleEnd = getCycleEndDate(cycleStartYear);
+
         List<LeaveApplication> applications = leaveApplicationRepository
-                .findByIdentityAndStatusesOrderByCreatedAtAsc(
+                .findByIdentityAndStatusesAndCycleOrderByCreatedAtAsc(
                         employee.getEmployeeId(),
                         employee.getUsername(),
                         employee.getEmailId(),
-                        TRACKED_LEAVE_STATUSES);
+                        TRACKED_LEAVE_STATUSES,
+                        cycleStart,
+                        cycleEnd);
 
         for (LeaveApplication app : applications) {
             double duration = normalizeLeaveUnits(app.getDuration() == null ? 0.0 : app.getDuration());

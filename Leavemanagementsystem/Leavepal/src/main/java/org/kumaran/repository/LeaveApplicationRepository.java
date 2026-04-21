@@ -27,6 +27,27 @@ public interface LeaveApplicationRepository extends JpaRepository<LeaveApplicati
                         select la
                         from LeaveApplication la
                         where lower(la.status) in :statuses
+                          and la.fromDate >= :cycleStart
+                          and la.fromDate <= :cycleEnd
+                          and (
+                            la.employeeId = :employeeId
+                         or la.username = :username
+                         or la.emailId = :emailId
+                          )
+                        order by la.createdAt asc
+                        """)
+        List<LeaveApplication> findByIdentityAndStatusesAndCycleOrderByCreatedAtAsc(
+                        @Param("employeeId") String employeeId,
+                        @Param("username") String username,
+                        @Param("emailId") String emailId,
+                        @Param("statuses") Collection<String> statuses,
+                        @Param("cycleStart") String cycleStart,
+                        @Param("cycleEnd") String cycleEnd);
+
+        @Query("""
+                        select la
+                        from LeaveApplication la
+                        where lower(la.status) in :statuses
                           and (
                             la.employeeId = :employeeId
                          or la.username = :username

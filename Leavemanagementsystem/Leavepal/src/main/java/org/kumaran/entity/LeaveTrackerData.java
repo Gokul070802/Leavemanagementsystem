@@ -57,6 +57,9 @@ public class LeaveTrackerData {
     @Schema(description = "Loss of pay booked", example = "0.0")
     private Double lossOfPayBooked = 0.0;
 
+    @Schema(description = "Leave cycle label, e.g. Apr 2026 – Mar 2027", example = "Apr 2026 – Mar 2027")
+    private String cycleLabel;
+
     @Column(nullable = false, updatable = false)
     @Schema(description = "Created timestamp")
     private Long createdAt = System.currentTimeMillis();
@@ -195,5 +198,14 @@ public class LeaveTrackerData {
 
     public void setUpdatedAt(Long updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public String getCycleLabel() {
+        return cycleLabel;
+    }
+
+    public void setCycleLabel(String cycleLabel) {
+        this.cycleLabel = cycleLabel;
+        this.updatedAt = System.currentTimeMillis();
     }
 }
