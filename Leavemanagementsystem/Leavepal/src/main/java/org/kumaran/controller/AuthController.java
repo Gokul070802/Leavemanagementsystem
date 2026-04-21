@@ -7,7 +7,10 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -21,6 +24,8 @@ import org.kumaran.dto.CreateUserRequest;
 import org.kumaran.dto.LoginRequest;
 import org.kumaran.dto.UserResponse;
 import org.kumaran.entity.AppNotification;
+import org.kumaran.entity.LeaveApplication;
+import org.kumaran.entity.LeaveTrackerData;
 import org.kumaran.entity.UserAccount;
 import org.kumaran.repository.AppNotificationRepository;
 import org.kumaran.repository.LeaveApplicationRepository;
@@ -69,6 +74,7 @@ public class AuthController {
     private static final Pattern USERNAME_PATTERN = Pattern.compile("^[A-Za-z0-9._-]+$");
     private static final Pattern PHONE_PATTERN = Pattern.compile("^\\+91[6-9]\\d{9}$");
     private static final Pattern ADDRESS_PATTERN = Pattern.compile("^[a-zA-Z0-9 /().,'-]{1,255}$");
+    private static final Pattern EMPLOYEE_ID_PATTERN = Pattern.compile("LP-(\\d+)");
 
     public AuthController(UserAccountRepository userRepository,
             LeaveTrackerRepository leaveTrackerRepository,
@@ -530,20 +536,26 @@ public class AuthController {
     }
 
     private String generateNextEmployeeId() {
-        List<UserAccount> allUsers = userRepository.findAll();
-        int maxSequence = allUsers.stream()
+        List<Integer> usedSequences = userRepository.findAll().stream()
                 .map(UserAccount::getEmployeeId)
-                .filter(Objects::nonNull)
-                .map(id -> {
-                    Matcher matcher = Pattern.compile("LP-(\\d+)").matcher(id);
-                    if (matcher.matches()) {
-                        return Integer.parseInt(matcher.group(1));
-                    }
-                    return 0;
-                })
-                .max(Integer::compareTo)
-                .orElse(0);
-        return String.format("LP-%03d", maxSequence + 1);
+                .map(this::extractEmployeeSequence)
+                .filter(sequence -> sequence > 0)
+                .distinct()
+                .sorted()
+                .toList();
+
+        int nextSequence = 1;
+        for (Integer usedSequence : usedSequences) {
+            if (usedSequence == nextSequence) {
+                nextSequence++;
+                continue;
+            }
+            if (usedSequence > nextSequence) {
+                break;
+            }
+        }
+
+        return formatEmployeeId(nextSequence);
     }
 
     @GetMapping("/users")
@@ -766,7 +778,106 @@ public class AuthController {
         }
 
         userRepository.delete(user);
+        resequenceEmployeeIdsAfterDeletion(deletedEmployeeId);
         return ResponseEntity.ok("User deleted successfully");
+    }
+
+    private void resequenceEmployeeIdsAfterDeletion(String deletedEmployeeId) {
+        int deletedSequence = extractEmployeeSequence(deletedEmployeeId);
+        if (deletedSequence <= 0) {
+            return;
+        }
+
+        List<UserAccount> allUsers = new ArrayList<>(userRepository.findAll());
+        List<UserAccount> usersToResequence = allUsers.stream()
+                .filter(candidate -> extractEmployeeSequence(candidate.getEmployeeId()) > deletedSequence)
+                .sorted(Comparator.comparingInt(candidate -> extractEmployeeSequence(candidate.getEmployeeId())))
+                .toList();
+
+        if (usersToResequence.isEmpty()) {
+            return;
+        }
+
+        Map<String, String> employeeIdReplacements = new LinkedHashMap<>();
+        Map<Long, String> finalUserIdsById = new HashMap<>();
+        for (UserAccount candidate : usersToResequence) {
+            String currentEmployeeId = candidate.getEmployeeId();
+            String nextEmployeeId = formatEmployeeId(extractEmployeeSequence(currentEmployeeId) - 1);
+            employeeIdReplacements.put(currentEmployeeId, nextEmployeeId);
+            finalUserIdsById.put(candidate.getId(), nextEmployeeId);
+            candidate.setEmployeeId(buildTemporaryEmployeeId(currentEmployeeId, candidate.getId()));
+        }
+        userRepository.saveAllAndFlush(usersToResequence);
+
+        for (UserAccount candidate : usersToResequence) {
+            candidate.setEmployeeId(finalUserIdsById.get(candidate.getId()));
+        }
+        for (UserAccount candidate : allUsers) {
+            String reportingEmployeeId = candidate.getReportingEmployeeId();
+            if (reportingEmployeeId != null && employeeIdReplacements.containsKey(reportingEmployeeId)) {
+                candidate.setReportingEmployeeId(employeeIdReplacements.get(reportingEmployeeId));
+            }
+        }
+        userRepository.saveAllAndFlush(allUsers);
+
+        List<LeaveTrackerData> leaveTrackers = new ArrayList<>(leaveTrackerRepository.findAll());
+        List<LeaveTrackerData> trackersToResequence = leaveTrackers.stream()
+                .filter(tracker -> employeeIdReplacements.containsKey(tracker.getEmployeeId()))
+                .toList();
+        if (!trackersToResequence.isEmpty()) {
+            Map<Long, String> finalTrackerIdsById = new HashMap<>();
+            for (LeaveTrackerData tracker : trackersToResequence) {
+                String currentEmployeeId = tracker.getEmployeeId();
+                finalTrackerIdsById.put(tracker.getId(), employeeIdReplacements.get(currentEmployeeId));
+                tracker.setEmployeeId(buildTemporaryEmployeeId(currentEmployeeId, tracker.getId()));
+            }
+            leaveTrackerRepository.saveAllAndFlush(trackersToResequence);
+
+            for (LeaveTrackerData tracker : trackersToResequence) {
+                tracker.setEmployeeId(finalTrackerIdsById.get(tracker.getId()));
+            }
+            leaveTrackerRepository.saveAllAndFlush(trackersToResequence);
+        }
+
+        List<LeaveApplication> leaveApplications = new ArrayList<>(leaveApplicationRepository.findAll());
+        boolean leaveApplicationsUpdated = false;
+        for (LeaveApplication leaveApplication : leaveApplications) {
+            String employeeId = leaveApplication.getEmployeeId();
+            if (employeeId != null && employeeIdReplacements.containsKey(employeeId)) {
+                leaveApplication.setEmployeeId(employeeIdReplacements.get(employeeId));
+                leaveApplicationsUpdated = true;
+            }
+
+            String reportingManagerId = leaveApplication.getReportingManagerId();
+            if (reportingManagerId != null && employeeIdReplacements.containsKey(reportingManagerId)) {
+                leaveApplication.setReportingManagerId(employeeIdReplacements.get(reportingManagerId));
+                leaveApplicationsUpdated = true;
+            }
+        }
+        if (leaveApplicationsUpdated) {
+            leaveApplicationRepository.saveAll(leaveApplications);
+        }
+    }
+
+    private int extractEmployeeSequence(String employeeId) {
+        if (employeeId == null || employeeId.isBlank()) {
+            return -1;
+        }
+
+        Matcher matcher = EMPLOYEE_ID_PATTERN.matcher(employeeId.trim());
+        if (!matcher.matches()) {
+            return -1;
+        }
+
+        return Integer.parseInt(matcher.group(1));
+    }
+
+    private String formatEmployeeId(int sequence) {
+        return String.format("LP-%03d", sequence);
+    }
+
+    private String buildTemporaryEmployeeId(String employeeId, Long entityId) {
+        return "TMP-" + employeeId + "-" + entityId;
     }
 
     private boolean equalsIgnoreCase(String a, String b) {
