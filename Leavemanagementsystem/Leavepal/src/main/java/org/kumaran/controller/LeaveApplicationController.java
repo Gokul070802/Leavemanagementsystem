@@ -119,20 +119,25 @@ public class LeaveApplicationController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(leaveDateError.get());
         }
 
-        if (!hasValidLeaveTracker(actor, normalizedLeaveType)) {
+        LeaveTrackerData tracker = leaveTrackerService.recalculateLeaveTrackerForEmployee(actor);
+        if (tracker == null && (normalizedLeaveType.equals("sick") || normalizedLeaveType.equals("casual"))) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Unable to validate leave balance for employee");
         }
-
-        LeaveTrackerData tracker = leaveTrackerService.recalculateLeaveTrackerForEmployee(actor);
         double availableLeave = getAvailableLeaveForType(tracker, normalizedLeaveType);
         double requestedDuration = safeDouble(request.getDuration());
+        if (!isHalfDayIncrement(requestedDuration)) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Duration must be in 0.5 day increments");
+        }
+        requestedDuration = normalizeToHalfDay(requestedDuration);
+        availableLeave = normalizeToHalfDay(availableLeave);
         double primaryDuration = requestedDuration;
         double overflowLopDuration = 0.0;
 
         if ((normalizedLeaveType.equals("sick") || normalizedLeaveType.equals("casual"))
                 && requestedDuration > availableLeave) {
-            primaryDuration = Math.max(0.0, availableLeave);
-            overflowLopDuration = requestedDuration - primaryDuration;
+            primaryDuration = normalizeToHalfDay(Math.max(0.0, availableLeave));
+            overflowLopDuration = normalizeToHalfDay(requestedDuration - primaryDuration);
         }
 
         Optional<UserAccount> managerOpt = resolveManagerFor(actor, request);
@@ -182,6 +187,8 @@ public class LeaveApplicationController {
                             + ").",
                     "leave-request-submitted"));
         }
+
+        leaveTrackerService.recalculateLeaveTrackerForEmployee(actor);
 
         if (savedPrimary != null) {
             return ResponseEntity.status(HttpStatus.CREATED).body(savedPrimary);
@@ -485,10 +492,8 @@ public class LeaveApplicationController {
         app.setUpdatedAt(System.currentTimeMillis());
         LeaveApplication saved = leaveApplicationRepository.save(app);
 
-        if (status.equals("APPROVED")) {
-            findEmployeeForApplication(app)
-                    .ifPresent(employee -> leaveTrackerService.updateLeaveTrackerBookingOnApproval(employee));
-        }
+        findEmployeeForApplication(app)
+                .ifPresent(employee -> leaveTrackerService.updateLeaveTrackerBookingOnApproval(employee));
 
         createNotification(
                 app.getUsername(),
@@ -814,7 +819,7 @@ public class LeaveApplicationController {
         entity.setLeaveType(leaveType);
         entity.setFromDate(request.getFromDate());
         entity.setToDate(request.getToDate());
-        entity.setDuration(duration);
+        entity.setDuration(normalizeToHalfDay(duration));
         entity.setReason(request.getReason());
         entity.setSickAttachmentName(request.getSickAttachmentName());
         entity.setSickAttachmentData(request.getSickAttachmentData());
@@ -862,7 +867,7 @@ public class LeaveApplicationController {
             return false;
         }
 
-        LeaveTrackerData tracker = leaveTrackerService.recalculateLeaveTrackerForEmployee(employee);
+        LeaveTrackerData tracker = leaveTrackerService.getLeaveTrackerForEmployee(employee.getEmployeeId());
         return tracker != null;
     }
 
@@ -903,6 +908,15 @@ public class LeaveApplicationController {
 
     private double safeDouble(Double value) {
         return value == null ? 0.0 : value;
+    }
+
+    private boolean isHalfDayIncrement(double value) {
+        double scaled = value * 2.0;
+        return Math.abs(scaled - Math.rint(scaled)) < 1e-9;
+    }
+
+    private double normalizeToHalfDay(double value) {
+        return Math.round(value * 2.0) / 2.0;
     }
 
     private record AttachmentPayload(String contentType, byte[] bytes) {

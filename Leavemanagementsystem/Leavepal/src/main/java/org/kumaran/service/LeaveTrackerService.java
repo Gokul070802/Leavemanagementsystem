@@ -3,6 +3,7 @@ package org.kumaran.service;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 
 import org.kumaran.entity.LeaveApplication;
@@ -15,6 +16,8 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class LeaveTrackerService {
+    private static final List<String> TRACKED_LEAVE_STATUSES = List.of("approved", "pending");
+
     private final LeaveTrackerRepository leaveTrackerRepository;
     private final UserAccountRepository userRepository;
     private final LeaveApplicationRepository leaveApplicationRepository;
@@ -135,7 +138,11 @@ public class LeaveTrackerService {
      */
     public LeaveTrackerData syncLeaveTrackerForEmployee(UserAccount employee, double sickLeaveBooked,
             double casualLeaveBooked, double lopBooked) {
-        int totalEntitlement = calculateTotalEntitlement(employee.getJoining());
+        double totalEntitlement = calculateTotalEntitlement(employee.getJoining());
+
+        sickLeaveBooked = normalizeLeaveUnits(sickLeaveBooked);
+        casualLeaveBooked = normalizeLeaveUnits(casualLeaveBooked);
+        lopBooked = normalizeLeaveUnits(lopBooked);
 
         Optional<LeaveTrackerData> existing = leaveTrackerRepository.findByEmployeeId(employee.getEmployeeId());
         LeaveTrackerData tracker;
@@ -156,8 +163,8 @@ public class LeaveTrackerService {
                     employee.getJoining());
         }
 
-        tracker.setSickLeaveAvailable(Math.max(0.0, totalEntitlement - sickLeaveBooked));
-        tracker.setCasualLeaveAvailable(Math.max(0.0, totalEntitlement - casualLeaveBooked));
+        tracker.setSickLeaveAvailable(normalizeLeaveUnits(Math.max(0.0, totalEntitlement - sickLeaveBooked)));
+        tracker.setCasualLeaveAvailable(normalizeLeaveUnits(Math.max(0.0, totalEntitlement - casualLeaveBooked)));
         tracker.setLossOfPayAvailable(0.0);
         tracker.setSickLeaveBooked(sickLeaveBooked);
         tracker.setCasualLeaveBooked(casualLeaveBooked);
@@ -206,34 +213,34 @@ public class LeaveTrackerService {
             return null;
         }
 
-        int totalEntitlement = calculateTotalEntitlement(employee.getJoining());
+        double totalEntitlement = calculateTotalEntitlement(employee.getJoining());
         double sickBooked = 0.0;
         double casualBooked = 0.0;
         double lopBooked = 0.0;
 
         List<LeaveApplication> applications = leaveApplicationRepository
-                .findByIdentityAndStatusOrderByCreatedAtAsc(
+                .findByIdentityAndStatusesOrderByCreatedAtAsc(
                         employee.getEmployeeId(),
                         employee.getUsername(),
                         employee.getEmailId(),
-                        "APPROVED");
+                        TRACKED_LEAVE_STATUSES);
 
         for (LeaveApplication app : applications) {
-            double duration = app.getDuration() == null ? 0.0 : app.getDuration();
-            String leaveType = app.getLeaveType() == null ? "" : app.getLeaveType().trim().toLowerCase();
+            double duration = normalizeLeaveUnits(app.getDuration() == null ? 0.0 : app.getDuration());
+            String leaveType = app.getLeaveType() == null ? "" : app.getLeaveType().trim().toLowerCase(Locale.ROOT);
 
             if (leaveType.equals("lop")) {
-                lopBooked += duration;
+                lopBooked = normalizeLeaveUnits(lopBooked + duration);
             } else if (leaveType.equals("sick")) {
-                double available = Math.max(0.0, totalEntitlement - sickBooked);
-                double used = Math.min(duration, available);
-                sickBooked += used;
-                lopBooked += duration - used;
+                double available = normalizeLeaveUnits(Math.max(0.0, totalEntitlement - sickBooked));
+                double used = normalizeLeaveUnits(Math.min(duration, available));
+                sickBooked = normalizeLeaveUnits(sickBooked + used);
+                lopBooked = normalizeLeaveUnits(lopBooked + (duration - used));
             } else if (leaveType.equals("casual")) {
-                double available = Math.max(0.0, totalEntitlement - casualBooked);
-                double used = Math.min(duration, available);
-                casualBooked += used;
-                lopBooked += duration - used;
+                double available = normalizeLeaveUnits(Math.max(0.0, totalEntitlement - casualBooked));
+                double used = normalizeLeaveUnits(Math.min(duration, available));
+                casualBooked = normalizeLeaveUnits(casualBooked + used);
+                lopBooked = normalizeLeaveUnits(lopBooked + (duration - used));
             }
         }
 
@@ -245,5 +252,9 @@ public class LeaveTrackerService {
             return null;
         }
         return recalculateLeaveTrackerForEmployee(employee);
+    }
+
+    private double normalizeLeaveUnits(double value) {
+        return Math.round(value * 10.0) / 10.0;
     }
 }

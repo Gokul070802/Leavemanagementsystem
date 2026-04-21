@@ -17,6 +17,7 @@
 
     var apiBaseUrl = resolveApiBaseUrl();
     var nativeFetch = window.fetch.bind(window);
+    var inflightGetRequests = new Map();
 
     window.LEAVEPAL_API_BASE_URL = apiBaseUrl;
     window.buildApiUrl = function (path) {
@@ -37,18 +38,59 @@
     };
 
     window.fetch = function (input, init) {
-        if (typeof input === "string" && input.startsWith("/api/")) {
-            return nativeFetch(window.buildApiUrl(input), init);
+        var requestUrl = "";
+        var method = "GET";
+
+        if (typeof input === "string") {
+            requestUrl = input;
+            method = (init && init.method ? String(init.method) : "GET").toUpperCase();
+        } else if (input instanceof Request) {
+            requestUrl = input.url || "";
+            method = (init && init.method ? String(init.method) : input.method || "GET").toUpperCase();
         }
 
-        if (input instanceof Request) {
-            var requestUrl = input.url || "";
-            if (requestUrl.startsWith("/api/")) {
-                var rewritten = new Request(window.buildApiUrl(requestUrl), input);
-                return nativeFetch(rewritten, init);
+        var isApiRequest = requestUrl.startsWith("/api/");
+        if (!isApiRequest && requestUrl.indexOf(apiBaseUrl + "/api/") === 0) {
+            isApiRequest = true;
+        }
+
+        if (!isApiRequest) {
+            return nativeFetch(input, init);
+        }
+
+        var resolvedUrl = requestUrl.startsWith("/api/") ? window.buildApiUrl(requestUrl) : requestUrl;
+        if (method !== "GET") {
+            if (input instanceof Request && requestUrl.startsWith("/api/")) {
+                return nativeFetch(new Request(resolvedUrl, input), init);
             }
+            return nativeFetch(resolvedUrl, init);
         }
 
-        return nativeFetch(input, init);
+        var dedupeKey = method + "::" + resolvedUrl;
+        if (inflightGetRequests.has(dedupeKey)) {
+            return inflightGetRequests.get(dedupeKey).then(function (response) {
+                return response.clone();
+            });
+        }
+
+        var fetchPromise;
+        if (input instanceof Request) {
+            fetchPromise = nativeFetch(new Request(resolvedUrl, input), init);
+        } else {
+            fetchPromise = nativeFetch(resolvedUrl, init);
+        }
+
+        var trackedPromise = fetchPromise.then(function (response) {
+            inflightGetRequests.delete(dedupeKey);
+            return response;
+        }).catch(function (error) {
+            inflightGetRequests.delete(dedupeKey);
+            throw error;
+        });
+
+        inflightGetRequests.set(dedupeKey, trackedPromise);
+        return trackedPromise.then(function (response) {
+            return response.clone();
+        });
     };
 })();
