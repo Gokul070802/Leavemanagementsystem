@@ -1,4 +1,4 @@
-// Check stored preference or default to the currently active tab
+// Unified login form - auto-detects user role based on credentials
 document.addEventListener('DOMContentLoaded', function() {
     const notify = (message, type) => {
         if (window.showTopRightNotification) {
@@ -8,24 +8,8 @@ document.addEventListener('DOMContentLoaded', function() {
         console.error(message);
     };
 
-    const activeTab = document.querySelector('.tab-btn.active');
-    const savedTab = sessionStorage.getItem('loginRoleTab');
-    const savedRole = sessionStorage.getItem('userRole');
-    const preferredTab = savedTab || (savedRole && savedRole.toLowerCase() === 'admin' ? 'admin' : (activeTab ? activeTab.dataset.role : 'workforce'));
-    setTheme(preferredTab);
-
-    // Tab switching
-    const tabButtons = document.querySelectorAll('.tab-btn');
-    tabButtons.forEach(button => {
-        button.addEventListener('click', function() {
-            const role = this.dataset.role;
-            setTheme(role);
-            sessionStorage.setItem('loginRoleTab', role);
-
-            tabButtons.forEach(btn => btn.classList.remove('active'));
-            this.classList.add('active');
-        });
-    });
+    // Set unified theme
+    setTheme('unified');
 
     // Password toggle
     const togglePassword = document.getElementById('togglePassword');
@@ -39,13 +23,14 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    async function attemptLogin(username, password, role) {
+    async function attemptLogin(username, password) {
+        // Send without role - backend will auto-detect and validate user's actual role
         const response = await fetch('/api/auth/login', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ username, password, role })
+            body: JSON.stringify({ username, password, role: null })
         });
 
         if (response.status === 428) {
@@ -59,11 +44,10 @@ document.addEventListener('DOMContentLoaded', function() {
             await showForceResetPasswordModal({
                 username: details.username || username,
                 currentPassword: password,
-                role,
                 notify,
                 onSuccess: async (newPassword) => {
                     notify('Password reset complete. Logging you in...', 'success');
-                    await attemptLogin(username, newPassword, role);
+                    await attemptLogin(username, newPassword);
                 }
             });
             return;
@@ -93,8 +77,6 @@ document.addEventListener('DOMContentLoaded', function() {
             e.preventDefault();
             const username = document.getElementById('username').value.trim();
             const password = document.getElementById('password').value;
-            const activeTab = document.querySelector('.tab-btn.active');
-            const selectedRole = activeTab ? activeTab.dataset.role : 'workforce';
 
             // Validate input BEFORE login attempt
             const emailRegex = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
@@ -112,7 +94,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             try {
-                await attemptLogin(username, password, selectedRole);
+                await attemptLogin(username, password);
             } catch (error) {
                 console.error(error);
                 notify('Unable to connect to the authentication server.', 'error');
@@ -259,33 +241,10 @@ function showForceResetPasswordModal(config) {
     });
 }
 
-// Theme switching function
+// Unified theme - no role-specific styling
 function setTheme(role) {
     const body = document.body;
-    const tabRole = role === 'admin' ? 'admin' : 'workforce';
-    const forgotSection = document.getElementById('forgotPasswordSection');
-    
-    if (tabRole === 'admin') {
-        body.classList.remove('employee-theme');
-        body.classList.add('admin-theme');
-        if (forgotSection) {
-            forgotSection.style.display = 'none';
-        }
-    } else {
-        body.classList.remove('admin-theme');
-        body.classList.add('employee-theme');
-        if (forgotSection) {
-            forgotSection.style.display = 'block';
-        }
-    }
-    
-    // Update active tab
-    const tabButtons = document.querySelectorAll('.tab-btn');
-    tabButtons.forEach(btn => {
-        if (btn.dataset.role === tabRole) {
-            btn.classList.add('active');
-        } else {
-            btn.classList.remove('active');
-        }
-    });
+    // Remove all theme classes for unified login
+    body.classList.remove('employee-theme', 'admin-theme');
+    body.classList.add('unified-theme');
 }

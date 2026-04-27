@@ -112,6 +112,54 @@ body.admin-theme .forgot-password a {
     color: #000000;
 }
 
+/* Unified Theme - Professional style for unified login */
+body.unified-theme {
+    background-color: #000000;
+    color: #ffffff;
+}
+
+body.unified-theme .left-partition {
+    background-color: #000000;
+}
+
+body.unified-theme .right-partition {
+    background-color: #000000;
+}
+
+body.unified-theme .logo-section svg,
+body.unified-theme .company-name,
+body.unified-theme .login-title,
+body.unified-theme .tab-btn,
+body.unified-theme input,
+body.unified-theme .toggle-password,
+body.unified-theme a {
+    color: #ffffff;
+}
+
+body.unified-theme .login-btn,
+body.unified-theme .send-request-btn {
+    background-color: #f4d276;
+    color: #000000;
+}
+
+body.unified-theme input {
+    border-color: #ffffff;
+    background-color: #000000;
+}
+
+body.unified-theme input::placeholder {
+    color: #666666;
+}
+
+body.unified-theme .forgot-password a {
+    color: #D4AF37;
+}
+
+body.unified-theme .logo-section svg,
+body.unified-theme .company-name {
+    color: #f4d276;
+}
+
 /* Login Container */
 .login-container {
     min-height: 100vh;
@@ -185,9 +233,19 @@ body.admin-theme .logo-img {
     max-width: 350px;
 }
 
-/* Tabs */
+/* Unified Login Title */
+.login-title {
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 40px;
+    text-align: center;
+    letter-spacing: 1px;
+    color: #333;
+}
+
+/* Tabs - Hidden in unified login */
 .tabs {
-    display: flex;
+    display: none;
     gap: 40px;
     margin-bottom: 50px;
     position: relative;
